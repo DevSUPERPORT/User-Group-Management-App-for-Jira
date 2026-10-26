@@ -1,0 +1,409 @@
+modules:
+  # UC-01 .. UC-06: "Groups" entry in the project settings, where project admins
+  # already manage people and permissions.
+  jira:projectSettingsPage:
+    - key: gum-project-settings
+      resource: main
+      icon: resource:icons;superport.svg
+      resolver:
+        function: resolver
+      title: Groups
+      layout: basic
+  # "My groups" for project members: own groups (read-only) and access requests.
+  jira:projectPage:
+    - key: gum-my-groups
+      resource: main
+      icon: resource:icons;superport.svg
+      resolver:
+        function: resolver
+      title: My groups
+      layout: basic
+  # Read-only audit log for auditors (members of the configured auditor groups).
+  jira:globalPage:
+    - key: gum-audit
+      resource: main
+      icon: resource:icons;superport.svg
+      resolver:
+        function: resolver
+      title: Group audit log
+      layout: basic
+  # Global configuration, compliance overview and full audit log for Jira admins.
+  jira:adminPage:
+    - key: gum-admin-page
+      resource: main
+      icon: resource:icons;superport.svg
+      resolver:
+        function: resolver
+      title: Group & User Management
+      layout: basic
+
+  # Rovo: AI-assisted group and user management. Every action runs through the
+  # same permission checks as the app; changes are audited "via Rovo".
+  rovo:agent:
+    - key: gum-agent
+      name: Group & User Management
+      description: Manages project groups and their members safely – who is in which group, where a group is used, access requests, reviews and the audit log.
+      icon: resource:icons;superport.svg
+      prompt: |
+        You are the SUPERPORT "Group & User Management" assistant for Jira project admins.
+        You help them see and change the groups of their Jira projects (named atlassian-<PROJECTKEY>-<name>).
+
+        Rules you always follow:
+        - Ask for the project key if it is not clear, and use the group's short name or full name exactly as the user gives it.
+        - Before any change (create a group, add or remove people, change an end date or description, approve or deny a request),
+          first say exactly what you are going to do and ask the user to confirm. Only call the action after they confirm.
+        - Never guess people: if a name matches several people or nobody, show that and ask instead of picking someone.
+        - Groups cannot be deleted or renamed. Blocked groups (Atlassian core and product access groups) and IdP-synchronised groups cannot be changed.
+        - If an action answers ok:false, explain the error in plain words; nothing was changed.
+        - After a change, mention that it is recorded in the audit log and that it can be undone in the app.
+        - Before removing people, offer to show where the group is used (the where-used action), so the user sees what access they lose.
+        Answer in the user's language (German or English), short and clear, using lists for several items.
+      conversationStarters:
+        - Which groups exist in my project and who is in them?
+        - Where is a group used (workflows, schemes, Confluence)?
+        - Add people to a group for 30 days
+        - Show pending access requests and expiring memberships
+      actions:
+        - gum-list-groups
+        - gum-group-details
+        - gum-where-used
+        - gum-audit-log
+        - gum-compliance
+        - gum-create-group
+        - gum-add-members
+        - gum-remove-members
+        - gum-set-end-date
+        - gum-update-description
+        - gum-decide-request
+
+  action:
+    - key: gum-list-groups
+      name: List project groups
+      function: rovo-list-groups
+      actionVerb: GET
+      description: Lists the groups of a Jira project with member counts, review status and pending access requests.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project, e.g. GMT
+    - key: gum-group-details
+      name: Show group details
+      function: rovo-group-details
+      actionVerb: GET
+      description: Shows a group's description, members (with end dates and who added them) and recent changes.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project, e.g. GMT
+        groupName:
+          title: Group name
+          type: string
+          required: true
+          description: Short name (e.g. developers) or full name (atlassian-GMT-developers)
+    - key: gum-where-used
+      name: Where is a group used
+      function: rovo-where-used
+      actionVerb: GET
+      description: Shows where a group is used - permission schemes, workflows, project roles, notification schemes, issue security, filters, dashboards, Confluence spaces and pages.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project, e.g. GMT
+        groupName:
+          title: Group name
+          type: string
+          required: true
+          description: Short or full group name
+    - key: gum-audit-log
+      name: Show audit log
+      function: rovo-audit-log
+      actionVerb: GET
+      description: Shows recent changes to the project's groups from the audit log.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        days:
+          title: Days
+          type: integer
+          required: false
+          description: How many days back (1-365, default 30)
+        person:
+          title: Person
+          type: string
+          required: false
+          description: Only entries about or by this person
+    - key: gum-compliance
+      name: Compliance check
+      function: rovo-compliance
+      actionVerb: GET
+      description: Lists groups due for an access review, pending access requests, memberships ending within 14 days and deactivated accounts in the project's groups.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+    - key: gum-create-group
+      name: Create group
+      function: rovo-create-group
+      actionVerb: CREATE
+      description: Creates a new group atlassian-<PROJECTKEY>-<namePart>. Only after the user confirmed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        namePart:
+          title: Name part
+          type: string
+          required: true
+          description: Lowercase letters, digits and hyphens, e.g. reviewer-extern
+        description:
+          title: Description
+          type: string
+          required: false
+          description: What the group is used for
+        addMe:
+          title: Add me
+          type: boolean
+          required: false
+          description: Add the requesting user as the first member
+    - key: gum-add-members
+      name: Add members
+      function: rovo-add-members
+      actionVerb: CREATE
+      description: Adds up to 10 people (names or emails, comma separated) to a group, optionally until an end date. Only after the user confirmed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        groupName:
+          title: Group name
+          type: string
+          required: true
+          description: Short or full group name
+        people:
+          title: People
+          type: string
+          required: true
+          description: Names or email addresses, comma separated
+        endDate:
+          title: End date
+          type: string
+          required: false
+          description: Optional end of access as YYYY-MM-DD
+    - key: gum-remove-members
+      name: Remove members
+      function: rovo-remove-members
+      actionVerb: DELETE
+      description: Removes up to 5 members (names or emails) from a group. Only after the user confirmed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        groupName:
+          title: Group name
+          type: string
+          required: true
+          description: Short or full group name
+        people:
+          title: People
+          type: string
+          required: true
+          description: Names or email addresses of current members, comma separated
+        note:
+          title: Note
+          type: string
+          required: false
+          description: Reason, stored in the audit log
+    - key: gum-set-end-date
+      name: Set end of access
+      function: rovo-set-end-date
+      actionVerb: UPDATE
+      description: Sets or clears the end date of one member's access. Only after the user confirmed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        groupName:
+          title: Group name
+          type: string
+          required: true
+          description: Short or full group name
+        person:
+          title: Person
+          type: string
+          required: true
+          description: Name or email of the member
+        endDate:
+          title: End date
+          type: string
+          required: true
+          description: YYYY-MM-DD, or "none" to remove the end date
+    - key: gum-update-description
+      name: Update group description
+      function: rovo-update-description
+      actionVerb: UPDATE
+      description: Changes a group's description. Only after the user confirmed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        groupName:
+          title: Group name
+          type: string
+          required: true
+          description: Short or full group name
+        description:
+          title: Description
+          type: string
+          required: true
+          description: The new description
+    - key: gum-decide-request
+      name: Approve or deny an access request
+      function: rovo-decide-request
+      actionVerb: UPDATE
+      description: Approves or denies a pending access request of a person. Only after the user confirmed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        person:
+          title: Person
+          type: string
+          required: true
+          description: Name of the person who requested access
+        groupName:
+          title: Group name
+          type: string
+          required: false
+          description: Group of the request, if the person has several
+        decision:
+          title: Decision
+          type: string
+          required: true
+          description: approve or deny
+        note:
+          title: Note
+          type: string
+          required: false
+          description: Note for the requester and the audit log
+
+  function:
+    - key: resolver
+      handler: index.handler
+    - key: retention
+      handler: index.retentionHandler
+    - key: lifecycle
+      handler: index.lifecycleHandler
+    - key: expiry
+      handler: index.expiryHandler
+    - key: confluence-index
+      handler: index.confluenceIndexHandler
+    - key: automation
+      handler: index.automationHandler
+    - key: rovo-list-groups
+      handler: index.rovoListGroups
+    - key: rovo-group-details
+      handler: index.rovoGroupDetails
+    - key: rovo-where-used
+      handler: index.rovoWhereUsed
+    - key: rovo-audit-log
+      handler: index.rovoAuditLog
+    - key: rovo-compliance
+      handler: index.rovoComplianceCheck
+    - key: rovo-create-group
+      handler: index.rovoCreateGroup
+    - key: rovo-add-members
+      handler: index.rovoAddMembers
+    - key: rovo-remove-members
+      handler: index.rovoRemoveMembers
+    - key: rovo-set-end-date
+      handler: index.rovoSetEndDate
+    - key: rovo-update-description
+      handler: index.rovoUpdateDescription
+    - key: rovo-decide-request
+      handler: index.rovoDecideRequest
+  scheduledTrigger:
+    - key: audit-retention
+      function: retention
+      interval: day
+    - key: membership-expiry
+      function: expiry
+      interval: hour
+    - key: confluence-restriction-index
+      function: confluence-index
+      interval: hour
+    - key: deactivated-cleanup
+      function: automation
+      interval: day
+  trigger:
+    - key: sql-migrations
+      function: lifecycle
+      events:
+        - avi:forge:installed:app
+        - avi:forge:upgraded:app
+  sql:
+    - key: main
+      engine: mysql
+resources:
+  - key: main
+    path: static/app/build
+    tunnel:
+      port: 3000
+  # Black/white SUPERPORT mark shown next to the app's entries in Jira's menus.
+  - key: icons
+    path: static/icons
+permissions:
+  scopes:
+    - read:jira-user
+    - read:jira-work
+    - manage:jira-configuration
+    - storage:app
+    # Workflow usage (new workflow API) - the classic scopes are not accepted there.
+    - read:workflow:jira
+    # Issue security usage (scheme list only accepts these granular read scopes).
+    - read:issue-security-scheme:jira
+    - read:issue-security-level:jira
+    # Confluence usage (space permissions, page restrictions index).
+    - read:confluence-space.summary
+    - read:confluence-content.all
+    - read:space:confluence
+    - read:space.permission:confluence
+    - read:page:confluence
+  content:
+    styles:
+      - unsafe-inline
+  # Group writes go through the Atlassian Organization Admin API (ORG_ID / ORG_API_KEY).
+  external:
+    fetch:
+      backend:
+        - address: https://api.atlassian.com
+app:
+  id: ari:cloud:ecosystem::app/dc5e1b22-ba7a-4f79-803d-48d73eee2104
+  runtime:
+    name: nodejs22.x
+  # Enable before listing as a paid Marketplace app; the service then rejects
+  # write operations when context.license.isActive is false.
+  # licensing:
+  #   enabled: true

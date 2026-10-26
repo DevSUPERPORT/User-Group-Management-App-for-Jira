@@ -1,0 +1,60 @@
+/* SUPERPORT design tokens (from the "Group & User Management – App-Design" canvas). */
+:root {
+  --bg: #f5f4f1;
+  --surface: #ffffff;
+  --soft: #f2efe9;
+  --sunken: #f5f4f1;
+  --line: #e0ddd6;
+  --line-strong: #cac6bb;
+  --text: #262729;
+  --muted: #6b6860;
+  --accent: #c04003;
+  --accent-bright: #e34b04;
+  --accent-tint: #fce9df;
+  --accent-ring: rgba(227, 75, 4, 0.28);
+  --on-accent: #ffffff;
+  --ink: #262729;
+  --on-ink: #ffffff;
+  --danger: #b3261e;
+  --danger-tint: #fbe9e7;
+  --scrim: rgba(38, 39, 41, 0.55);
+  --dot: #e0ddd6;
+
+  --radius: 10px;
+  --radius-pill: 999px;
+  --shadow-1: 0 1px 2px rgba(38, 39, 41, 0.04);
+  --shadow-2: 0 10px 28px -12px rgba(38, 39, 41, 0.18), 0 2px 6px rgba(38, 39, 41, 0.05);
+  --shadow-3: 0 32px 80px -24px rgba(38, 39, 41, 0.35), 0 8px 24px rgba(38, 39, 41, 0.08);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --font: 'Plain', 'Inter Variable', 'Helvetica Neue', Arial, sans-serif;
+  color-scheme: light;
+}
+
+/* Jira dark theme (view.theme.enable() sets data-color-mode on <html>). */
+html[data-color-mode='dark'] {
+  --bg: #161719;
+  --surface: #1f2023;
+  --soft: #2a2b2f;
+  --sunken: #19191b;
+  --line: #34363a;
+  --line-strong: #4a4c51;
+  --text: #edebe6;
+  --muted: #a6a39c;
+  --accent: #f06a2a;
+  --accent-bright: #ff7a3d;
+  --accent-tint: rgba(240, 106, 42, 0.16);
+  --accent-ring: rgba(255, 122, 61, 0.35);
+  --on-accent: #17181a;
+  --ink: #edebe6;
+  --on-ink: #17181a;
+  --danger: #ff8a80;
+  --danger-tint: rgba(255, 138, 128, 0.14);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --dot: #2e3034;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 10px 28px -12px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-3: 0 32px 80px -24px rgba(0, 0, 0, 0.75), 0 8px 24px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
