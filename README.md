@@ -125,10 +125,38 @@ Open http://localhost:3000. Useful query parameters:
 
 ### Deploy to Jira Cloud
 
+> **Live installation:** the app runs from the Forge **production** environment on
+> **superportdev.atlassian.net**, in Jira and Confluence (since 2026-10-27). There is no development
+> installation on the site any more, so always deploy to production.
+
+Ship a change:
+
+```bash
+npm test
+npm run deploy
+```
+
+`npm run deploy` builds the UI and runs `forge deploy -e production`. Minor versions reach the site
+automatically. If a change adds scopes or egress (a major version), upgrade the installations and
+approve the new permissions:
+
+```bash
+forge install --upgrade --site superportdev.atlassian.net --product jira -e production
+forge install --upgrade --site superportdev.atlassian.net --product confluence -e production
+```
+
+Check what is installed with `forge install list`. `npm run deploy:dev` deploys to the development
+environment for experiments; install it on a site only for testing, since it shows up with a **DEV** badge.
+
+Forge deploys sometimes time out on Atlassian's side (`Request timed out`). Nothing breaks; run the
+deploy again, and check `forge environments list` for the last deploy time.
+
+First-time setup on a new site:
+
 ```bash
 forge register
 npm run deploy
-forge install --site <site>.atlassian.net --product jira
+forge install --site <site>.atlassian.net --product jira -e production
 ```
 
 `npm run validate` checks the manifest against the Forge schema offline. `forge tunnel` serves the
@@ -143,16 +171,17 @@ group **writes** go through the Atlassian Organization Admin API (reads still us
 2. Store it as Forge variables:
 
    ```bash
-   forge variables set -e development ORG_ID <org-id>
-   forge variables set -e development --encrypt ORG_API_KEY <api-key>
+   forge variables set -e production ORG_ID <org-id>
+   forge variables set -e production --encrypt ORG_API_KEY <api-key>
    ```
 
-   Set `ORG_DIRECTORY_ID` too if the org has more than one user directory.
+   Set `ORG_DIRECTORY_ID` too if the org has more than one user directory. Each Forge environment has
+   its own variables; production on superportdev already has `ORG_ID` and `ORG_API_KEY`.
 3. Deploy and upgrade the installation (the egress to `https://api.atlassian.com` is a major version):
 
    ```bash
    npm run deploy
-   forge install --upgrade --site <site> --product jira -e development
+   forge install --upgrade --site <site> --product jira -e production
    ```
 
 4. The admin page shows the connection status; **Test connection** re-runs the check.
@@ -160,7 +189,7 @@ group **writes** go through the Atlassian Organization Admin API (reads still us
 For Confluence usage checks, install the app in Confluence on the same site:
 
 ```bash
-forge install -p Confluence -s <site> -e <env>
+forge install -p Confluence -s <site> -e production
 ```
 
 ### Move data between installations
@@ -194,7 +223,8 @@ files from another site and weakened settings are refused. Importing is safe to 
 | `npm run build:ui` | Build the Custom UI for Forge |
 | `npm run build:demo` | Build the static demo |
 | `npm run validate` | Validate `manifest.yml` offline |
-| `npm run deploy` | Build the UI and `forge deploy` |
+| `npm run deploy` | Build the UI and deploy to **production** |
+| `npm run deploy:dev` | Build the UI and deploy to development |
 
 ---
 
