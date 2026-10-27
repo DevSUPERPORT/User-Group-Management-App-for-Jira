@@ -6,9 +6,10 @@ import { Icon } from '../../components/Icon.jsx';
 import { Button, Checkbox, IconButton } from '../../components/primitives.jsx';
 import { Modal } from '../../components/Modal.jsx';
 import { useNotify } from '../../components/Toaster.jsx';
-import { ease } from '../../motion.js';
+import { ease, shake } from '../../motion.js';
 import { downloadText } from '../download.js';
 import { errorText } from '../errors.js';
+import { MIN_PASSPHRASE, decryptExport, encryptExport, readEnvelope } from './exportCrypto.js';
 
 const FORMAT = 'superport-gum-export';
 const VERSION = 1;
@@ -33,17 +34,11 @@ function chunks(list, maxCount) {
   return out;
 }
 
-// Checks the file before anything is sent: right format, complete, untouched counts.
-function readExport(text) {
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    return { error: 'transfer.invalidFile' };
-  }
-  if (!data || data.format !== FORMAT || data.version !== VERSION || !Array.isArray(data.kvs) || !Array.isArray(data.audit)) return { error: 'transfer.invalidFile' };
-  if (data.counts && (data.counts.records !== data.kvs.length || data.counts.entries !== data.audit.length)) return { error: 'transfer.countMismatch' };
-  return { data };
+// Checks the decrypted content: right format, complete, untouched counts.
+function checkExport(data) {
+  if (!data || data.format !== FORMAT || data.version !== VERSION || !Array.isArray(data.kvs) || !Array.isArray(data.audit)) return 'transfer.invalidFile';
+  if (!data.counts || data.counts.records !== data.kvs.length || data.counts.entries !== data.audit.length) return 'transfer.countMismatch';
+  return null;
 }
 
 function Progress({ value }) {
@@ -54,17 +49,112 @@ function Progress({ value }) {
   );
 }
 
-/** Jira admins only: move all app data between installations (e.g. development → production). */
+function PassphraseField({ id, label, value, onChange, autoComplete, invalid, inputRef, disabled }) {
+  return (
+    <div className="stack-6">
+      <label htmlFor={id} className="label-strong">
+        {label}
+      </label>
+      <input
+        id={id}
+        ref={inputRef}
+        className={`input ${invalid ? 'is-invalid' : ''}`}
+        type="password"
+        autoComplete={autoComplete}
+        spellCheck={false}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+/** Jira admins only: move all app data between installations (e.g. development → production), always encrypted. */
 export function DataTransfer({ onImported }) {
-  const { t, fmt } = useI18n();
-  const notify = useNotify();
+  const { t } = useI18n();
   const fileRef = useRef(null);
-  const [exporting, setExporting] = useState(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const [pending, setPending] = useState(null);
   const [fileError, setFileError] = useState(null);
 
-  const exportAll = async () => {
-    setExporting({ records: 0, entries: 0 });
+  const pickFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setFileError(null);
+    try {
+      setPending({ name: file.name, envelope: readEnvelope(await file.text()) });
+    } catch (err) {
+      setFileError(t(err.reason === 'notEncrypted' ? 'transfer.notEncrypted' : 'transfer.invalidFile'));
+    }
+  };
+
+  return (
+    <motion.section className="card section" aria-labelledby="sec-transfer" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.45, ease, delay: 0.18 } }}>
+      <div className="stack-4">
+        <h2 id="sec-transfer" className="h3">
+          {t('transfer.title')}
+        </h2>
+        <p className="muted small">{t('transfer.hint')}</p>
+      </div>
+      <p className="notice">
+        <Icon name="lock" size={16} />
+        <span>{t('transfer.security')}</span>
+      </p>
+      <div className="row-12 wrap">
+        <Button icon="download" onClick={() => setExportOpen(true)}>
+          {t('transfer.export')}
+        </Button>
+        <Button icon="clipboard" onClick={() => fileRef.current?.click()}>
+          {t('transfer.import')}
+        </Button>
+        <input ref={fileRef} type="file" accept=".json,application/json" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={pickFile} />
+      </div>
+      {fileError && (
+        <p className="notice notice-error" role="alert">
+          <Icon name="alert" size={16} />
+          <span>{fileError}</span>
+        </p>
+      )}
+      <AnimatePresence>{exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}</AnimatePresence>
+      <AnimatePresence>
+        {pending && (
+          <ImportDialog
+            file={pending}
+            onClose={() => setPending(null)}
+            onDone={() => {
+              setPending(null);
+              onImported?.();
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </motion.section>
+  );
+}
+
+function ExportDialog({ onClose }) {
+  const { t } = useI18n();
+  const notify = useNotify();
+  const firstRef = useRef(null);
+  const [pass, setPass] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [progress, setProgress] = useState(null);
+  const [problem, setProblem] = useState(null);
+  const [nudge, setNudge] = useState(0);
+
+  const tooShort = [...pass].length < MIN_PASSPHRASE;
+  const mismatch = repeat.length > 0 && repeat !== pass;
+
+  const run = async () => {
+    if (tooShort || pass !== repeat) {
+      setProblem(t(tooShort ? 'transfer.passTooShort' : 'transfer.passMismatch', { min: MIN_PASSPHRASE }));
+      setNudge((n) => n + 1);
+      return;
+    }
+    setProblem(null);
+    setProgress({ records: 0, entries: 0, step: 'reading' });
     try {
       const meta = await call('exportData', { part: 'meta' });
       const kvs = [];
@@ -78,89 +168,103 @@ export function DataTransfer({ onImported }) {
           const page = await call('exportData', { part, cursor });
           list.push(...page.entries);
           cursor = page.cursor;
-          setExporting({ records: kvs.length, entries: audit.length });
+          setProgress({ records: kvs.length, entries: audit.length, step: 'reading' });
         } while (cursor);
       }
-      const file = { ...meta, counts: { records: kvs.length, entries: audit.length }, kvs, audit };
+      setProgress({ records: kvs.length, entries: audit.length, step: 'encrypting' });
+      const text = await encryptExport({ ...meta, counts: { records: kvs.length, entries: audit.length }, kvs, audit }, pass);
       const stamp = new Date(meta.exportedAt).toISOString().slice(0, 10);
-      downloadText(JSON.stringify(file), `group-user-management-export-${stamp}.json`, 'application/json');
-      notify({ type: 'success', title: t('transfer.exported', { records: kvs.length, entries: audit.length }) });
+      downloadText(text, `group-user-management-export-${stamp}.encrypted.json`, 'application/json');
+      notify({ type: 'success', title: t('transfer.exported', { records: kvs.length, entries: audit.length }), description: t('transfer.exportedHint') });
+      onClose();
     } catch (err) {
-      notify({ type: 'error', title: errorText(t, err) });
-    } finally {
-      setExporting(null);
+      setProblem(err?.reason ? t('transfer.invalidFile') : errorText(t, err));
+      setProgress(null);
     }
   };
 
-  const pickFile = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setFileError(null);
-    const { data, error } = readExport(await file.text());
-    if (error) setFileError(t(error));
-    else setPending({ name: file.name, data });
-  };
-
+  const busy = Boolean(progress);
   return (
-    <motion.section className="card section" aria-labelledby="sec-transfer" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.45, ease, delay: 0.18 } }}>
-      <div className="stack-4">
-        <h2 id="sec-transfer" className="h3">
-          {t('transfer.title')}
-        </h2>
-        <p className="muted small">{t('transfer.hint')}</p>
-      </div>
-      <p className="notice">
-        <Icon name="shield" size={16} />
-        <span>{t('transfer.adminOnly')}</span>
-      </p>
-      <div className="row-12 wrap">
-        <Button icon="download" onClick={exportAll} loading={Boolean(exporting)}>
-          {t('transfer.export')}
-        </Button>
-        <Button icon="clipboard" onClick={() => fileRef.current?.click()} disabled={Boolean(exporting)}>
-          {t('transfer.import')}
-        </Button>
-        <input ref={fileRef} type="file" accept=".json,application/json" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={pickFile} />
-      </div>
-      <AnimatePresence>
-        {exporting && (
-          <motion.p className="muted small" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            {t('transfer.exporting', { records: exporting.records, entries: exporting.entries })}
-          </motion.p>
-        )}
-      </AnimatePresence>
-      {fileError && (
-        <p className="notice notice-error" role="alert">
-          <Icon name="alert" size={16} />
-          <span>{fileError}</span>
+    <Modal labelledBy="export-title" onClose={busy ? () => {} : onClose} width={560} initialFocus={firstRef}>
+      <form
+        className="dialog-body"
+        onSubmit={(e) => {
+          e.preventDefault();
+          run();
+        }}
+      >
+        <div className="row-between start">
+          <div className="stack-6">
+            <div className="eyebrow">{t('transfer.encryptedEyebrow')}</div>
+            <h1 id="export-title" className="h1">
+              {t('transfer.exportTitle')}
+            </h1>
+          </div>
+          <IconButton icon="close" size={20} label={t('create.close')} onClick={onClose} disabled={busy} />
+        </div>
+        <p className="muted">{t('transfer.exportIntro', { min: MIN_PASSPHRASE })}</p>
+        <motion.div className="stack-16" key={nudge} animate={nudge ? shake : undefined}>
+          <PassphraseField id="export-pass" label={t('transfer.passphrase')} value={pass} onChange={setPass} autoComplete="new-password" inputRef={firstRef} disabled={busy} invalid={Boolean(problem) && tooShort} />
+          <PassphraseField id="export-pass-repeat" label={t('transfer.passphraseRepeat')} value={repeat} onChange={setRepeat} autoComplete="new-password" disabled={busy} invalid={mismatch} />
+        </motion.div>
+        <p className="notice">
+          <Icon name="key" size={16} />
+          <span>{t('transfer.keepPassphrase')}</span>
         </p>
-      )}
-      <AnimatePresence>
-        {pending && (
-          <ImportDialog
-            file={pending}
-            fmt={fmt}
-            onClose={() => setPending(null)}
-            onDone={() => {
-              setPending(null);
-              onImported?.();
-            }}
-          />
+        {busy && (
+          <p className="muted small" aria-live="polite">
+            {progress.step === 'encrypting' ? t('transfer.encrypting') : t('transfer.exporting', { records: progress.records, entries: progress.entries })}
+          </p>
         )}
-      </AnimatePresence>
-    </motion.section>
+        {problem && (
+          <p className="notice notice-error" role="alert">
+            <Icon name="alert" size={16} />
+            <span>{problem}</span>
+          </p>
+        )}
+        <div className="actions">
+          <Button onClick={onClose} disabled={busy}>
+            {t('transfer.cancel')}
+          </Button>
+          <Button type="submit" variant="primary" icon="lock" loading={busy}>
+            {t('transfer.exportEncrypted')}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
-function ImportDialog({ file, fmt, onClose, onDone }) {
-  const { t } = useI18n();
+function ImportDialog({ file, onClose, onDone }) {
+  const { t, fmt } = useI18n();
   const notify = useNotify();
-  const { data } = file;
+  const passRef = useRef(null);
+  const [pass, setPass] = useState('');
+  const [data, setData] = useState(null);
+  const [unlocking, setUnlocking] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [progress, setProgress] = useState(null);
   const [problem, setProblem] = useState(null);
-  const total = data.kvs.length + data.audit.length;
+  const [nudge, setNudge] = useState(0);
+  const total = data ? data.kvs.length + data.audit.length : 0;
+
+  const unlock = async () => {
+    setProblem(null);
+    setUnlocking(true);
+    try {
+      const plain = await decryptExport(file.envelope, pass);
+      const invalid = checkExport(plain);
+      if (invalid) throw Object.assign(new Error(invalid), { key: invalid });
+      setPass('');
+      setData(plain);
+    } catch (err) {
+      setProblem(t(err.key ?? (err.reason === 'wrongPassphrase' ? 'transfer.wrongPassphrase' : 'transfer.invalidFile')));
+      setNudge((n) => n + 1);
+      passRef.current?.focus();
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   const run = async () => {
     setProblem(null);
@@ -190,39 +294,59 @@ function ImportDialog({ file, fmt, onClose, onDone }) {
     }
   };
 
-  const busy = Boolean(progress);
+  const busy = Boolean(progress) || unlocking;
   return (
-    <Modal labelledBy="import-title" onClose={busy ? () => {} : onClose} width={560}>
-      <div className="dialog-body">
+    <Modal labelledBy="import-title" onClose={busy ? () => {} : onClose} width={560} initialFocus={passRef}>
+      <form
+        className="dialog-body"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!data) unlock();
+          else if (confirmed) run();
+        }}
+      >
         <div className="row-between start">
           <div className="stack-6">
-            <div className="eyebrow">{file.name}</div>
+            <div className="eyebrow break">{file.name}</div>
             <h1 id="import-title" className="h1">
               {t('transfer.importTitle')}
             </h1>
           </div>
           <IconButton icon="close" size={20} label={t('create.close')} onClick={onClose} disabled={busy} />
         </div>
-        <div className="stack-4">
-          <p className="label-strong">{t('transfer.fileCounts', { records: data.kvs.length, entries: data.audit.length })}</p>
-          <p className="muted small">{t('transfer.fileInfo', { date: fmt.dateTime(data.exportedAt), name: data.exportedBy ?? '–' })}</p>
-        </div>
-        <p className="notice">
-          <Icon name="info" size={16} />
-          <span>{t('transfer.replaceWarning')}</span>
-        </p>
-        {busy ? (
-          <div className="stack-8">
-            <Progress value={progress.done / Math.max(1, total)} />
-            <p className="muted small" aria-live="polite">
-              {t('transfer.importing', { done: progress.done, total })}
-            </p>
-          </div>
+
+        {!data ? (
+          <>
+            <p className="muted">{t('transfer.unlockIntro')}</p>
+            <motion.div key={nudge} animate={nudge ? shake : undefined}>
+              <PassphraseField id="import-pass" label={t('transfer.passphrase')} value={pass} onChange={setPass} autoComplete="current-password" inputRef={passRef} disabled={unlocking} invalid={Boolean(problem)} />
+            </motion.div>
+          </>
         ) : (
-          <Checkbox id="import-confirm" checked={confirmed} onChange={setConfirmed}>
-            {t('transfer.confirm')}
-          </Checkbox>
+          <>
+            <div className="stack-4">
+              <p className="label-strong">{t('transfer.fileCounts', { records: data.kvs.length, entries: data.audit.length })}</p>
+              <p className="muted small">{t('transfer.fileInfo', { date: fmt.dateTime(data.exportedAt), name: data.exportedBy ?? '–' })}</p>
+            </div>
+            <p className="notice">
+              <Icon name="info" size={16} />
+              <span>{t('transfer.replaceWarning')}</span>
+            </p>
+            {progress ? (
+              <div className="stack-8">
+                <Progress value={progress.done / Math.max(1, total)} />
+                <p className="muted small" aria-live="polite">
+                  {t('transfer.importing', { done: progress.done, total })}
+                </p>
+              </div>
+            ) : (
+              <Checkbox id="import-confirm" checked={confirmed} onChange={setConfirmed}>
+                {t('transfer.confirm')}
+              </Checkbox>
+            )}
+          </>
         )}
+
         {problem && (
           <p className="notice notice-error" role="alert">
             <Icon name="alert" size={16} />
@@ -233,11 +357,17 @@ function ImportDialog({ file, fmt, onClose, onDone }) {
           <Button onClick={onClose} disabled={busy}>
             {t('transfer.cancel')}
           </Button>
-          <Button variant="primary" onClick={run} disabled={!confirmed} loading={busy}>
-            {problem ? t('transfer.retry') : t('transfer.start')}
-          </Button>
+          {!data ? (
+            <Button type="submit" variant="primary" icon="key" loading={unlocking} disabled={!pass}>
+              {t('transfer.unlock')}
+            </Button>
+          ) : (
+            <Button type="submit" variant="primary" disabled={!confirmed} loading={Boolean(progress)}>
+              {problem ? t('transfer.retry') : t('transfer.start')}
+            </Button>
+          )}
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

@@ -163,6 +163,19 @@ For Confluence usage checks, install the app in Confluence on the same site:
 forge install -p Confluence -s <site> -e <env>
 ```
 
+### Move data between installations
+
+To move from one installation to another on the same site (for example development → production), a Jira admin
+uses **Export & import data** on the app's admin page:
+
+1. In the old installation: **Export all data**, choose a passphrase (at least 12 characters) and save the file.
+2. In the new installation: **Import from file…**, enter the passphrase, check the summary and import.
+
+The export contains every stored record and the complete audit log (original ids and times). It is always encrypted
+in the browser with **AES-256-GCM**, with the key derived from the passphrase by **PBKDF2-SHA-256 (600,000 iterations)**.
+The passphrase never leaves the browser, and changing any byte of the file makes it fail to open. Unencrypted files,
+files from another site and weakened settings are refused. Importing is safe to repeat: duplicates are skipped.
+
 ## Security model
 
 - The trusted context (project, account) always comes from Forge, never from the client.
@@ -170,6 +183,7 @@ forge install -p Confluence -s <site> -e <env>
 - Blocked and IdP-synced groups are never changed, by the UI, the API, the Rovo agent or the automations.
 - Rovo actions act as the calling user, add at most 10 / remove at most 5 people per call, and never guess ambiguous names.
 - The audit log is append-only; its only delete is the configured retention purge.
+- Data export and import are Jira-admin only (checked on every call), always encrypted, and recorded in the audit log.
 
 ## Scripts
 
