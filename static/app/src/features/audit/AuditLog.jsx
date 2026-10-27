@@ -173,7 +173,7 @@ export function AuditLog({ scope, preset }) {
           </label>
           <input id="f-person" className="input" type="search" placeholder={t('audit.personPlaceholder')} value={personInput} onChange={(e) => setPersonInput(e.target.value)} />
         </div>
-        <Button icon="download" onClick={exportCsv} loading={exporting} success={exported} disabled={!total}>
+        <Button icon="download" data-tour="export" onClick={exportCsv} loading={exporting} success={exported} disabled={!total}>
           {t('audit.export')}
         </Button>
       </div>

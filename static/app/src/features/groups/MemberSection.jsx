@@ -259,7 +259,7 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
   const editable = !group.readOnly;
 
   return (
-    <div className="stack-16">
+    <div className="stack-16" data-tour="members">
       <div className="row-between wrap">
         <div className="row-baseline">
           <h3 className="h3">{t('members.title')}</h3>

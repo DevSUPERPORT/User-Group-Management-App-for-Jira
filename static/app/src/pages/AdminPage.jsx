@@ -8,6 +8,7 @@ import { AdminConfig } from '../features/admin/AdminConfig.jsx';
 import { AuditLog } from '../features/audit/AuditLog.jsx';
 import { StateScreen } from './StateScreens.jsx';
 import { ease } from '../motion.js';
+import { Tour, TutorialButton, useTutorial } from '../features/tutorial/Tour.jsx';
 
 const WIDTH = 880;
 
@@ -16,6 +17,7 @@ export function AdminPage() {
   const [boot, setBoot] = useState(null);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('config');
+  const tour = useTutorial(Boolean(boot));
 
   const load = useCallback(() => {
     setError(null);
@@ -31,7 +33,18 @@ export function AdminPage() {
       <Header
         title={t('config.title')}
         maxWidth={wide ? 1200 : WIDTH}
-        actions={<Pill icon="shield">{t('config.badge')}</Pill>}
+        actions={
+          <>
+            <TutorialButton
+              disabled={!boot}
+              onClick={() => {
+                setTab('config');
+                tour.start();
+              }}
+            />
+            <Pill icon="shield">{t('config.badge')}</Pill>
+          </>
+        }
         tabs={
           <Tabs
             id="admin-tabs"
@@ -84,6 +97,7 @@ export function AdminPage() {
         </AnimatePresence>
       </motion.main>
       <Footer maxWidth={wide ? 1200 : WIDTH} />
+      <AnimatePresence>{tour.open && <Tour surface="admin" onClose={tour.close} />}</AnimatePresence>
     </div>
   );
 }

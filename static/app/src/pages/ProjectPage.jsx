@@ -14,6 +14,7 @@ import { PeoplePanel } from '../features/people/PeoplePanel.jsx';
 import { DetailSkeleton, EmptyGroups, StateScreen } from './StateScreens.jsx';
 import { ease } from '../motion.js';
 import { errorText } from '../features/errors.js';
+import { Tour, TutorialButton, useTutorial } from '../features/tutorial/Tour.jsx';
 
 const TAB_ORDER = ['groups', 'people', 'requests', 'audit'];
 
@@ -31,6 +32,7 @@ export function ProjectPage() {
   const [creating, setCreating] = useState(false);
   const [highlightId, setHighlightId] = useState(null);
   const [pending, setPending] = useState(0);
+  const tour = useTutorial(Boolean(boot));
 
   const load = useCallback(() => {
     setError(null);
@@ -90,9 +92,18 @@ export function ProjectPage() {
       <Header
         title={project ? t('project.title', { key: project.key }) : ' '}
         actions={
-          <Button variant="primary" icon="plus" onClick={() => setCreating(true)} disabled={!boot}>
-            {t('project.create')}
-          </Button>
+          <>
+            <TutorialButton
+              disabled={!boot}
+              onClick={() => {
+                switchTab('groups');
+                tour.start();
+              }}
+            />
+            <Button variant="primary" icon="plus" data-tour="create" onClick={() => setCreating(true)} disabled={!boot}>
+              {t('project.create')}
+            </Button>
+          </>
         }
         tabs={
           <Tabs
@@ -172,6 +183,7 @@ export function ProjectPage() {
       </main>
       <Footer />
 
+      <AnimatePresence>{tour.open && <Tour surface="project" onClose={tour.close} />}</AnimatePresence>
       <AnimatePresence>{creating && boot && <CreateGroupDialog project={project} prefix={boot.prefix} groups={groups} onClose={() => setCreating(false)} onCreated={onCreated} />}</AnimatePresence>
     </div>
   );

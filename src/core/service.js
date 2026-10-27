@@ -88,7 +88,10 @@ const keys = {
   expiryPrefix: (groupId) => `expiry:${groupId}:`,
   request: (projectId, id) => `request:${projectId}:${id}`,
   requestPrefix: (projectId) => `request:${projectId}:`,
+  tutorial: (accountId) => `tutorial:${accountId}`,
 };
+
+const TUTORIAL_SURFACES = ['project', 'member', 'admin', 'auditor'];
 
 function fold(s) {
   return (s ?? '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -897,6 +900,27 @@ export function createService({ jira, org = null, confluence = null, store, audi
     };
   }
 
+  // ---------------------------------------------------------------- first-run tutorial
+
+  // Which tutorial version the caller has finished or skipped on this surface.
+  // Stored per user, so every new user sees the tour once.
+  async function tutorialState(ctx) {
+    if (!ctx.accountId) return { seenVersion: null };
+    const seen = (await store.get(keys.tutorial(ctx.accountId))) ?? {};
+    return { seenVersion: seen[ctx.surface]?.version ?? null };
+  }
+
+  async function markTutorialSeen(ctx, { version = 1, completed = false } = {}) {
+    if (!ctx.accountId) throw new AppError(ErrorCodes.BAD_REQUEST, 'No account context');
+    if (!TUTORIAL_SURFACES.includes(ctx.surface)) throw new AppError(ErrorCodes.BAD_REQUEST, 'Unknown surface');
+    const v = Number(version);
+    if (!Number.isInteger(v) || v < 1 || v > 1000) throw new AppError(ErrorCodes.BAD_REQUEST, 'Invalid version');
+    const seen = (await store.get(keys.tutorial(ctx.accountId))) ?? {};
+    seen[ctx.surface] = { version: v, completed: Boolean(completed), at: now() };
+    await store.set(keys.tutorial(ctx.accountId), seen);
+    return { seenVersion: v };
+  }
+
   // ---------------------------------------------------------------- auditor surface
 
   async function auditorBootstrap(ctx) {
@@ -1519,6 +1543,8 @@ export function createService({ jira, org = null, confluence = null, store, audi
     resolveUsers,
     exportMembers,
     myGroups,
+    tutorialState,
+    markTutorialSeen,
     auditorBootstrap,
     requestAccess,
     withdrawRequest,

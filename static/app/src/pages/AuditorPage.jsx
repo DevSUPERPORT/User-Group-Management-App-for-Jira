@@ -5,12 +5,15 @@ import { Footer, Header } from '../components/Shell.jsx';
 import { Pill } from '../components/primitives.jsx';
 import { AuditLog } from '../features/audit/AuditLog.jsx';
 import { StateScreen } from './StateScreens.jsx';
+import { AnimatePresence } from 'framer-motion';
+import { Tour, TutorialButton, useTutorial } from '../features/tutorial/Tour.jsx';
 
 // Auditors / ISO officers: read and export the full audit log. Nothing else.
 export function AuditorPage() {
   const { t } = useI18n();
   const [boot, setBoot] = useState(null);
   const [error, setError] = useState(null);
+  const tour = useTutorial(Boolean(boot));
 
   const load = useCallback(() => {
     setError(null);
@@ -22,9 +25,15 @@ export function AuditorPage() {
 
   return (
     <div className="page">
-      <Header title={t('auditor.title')} actions={<Pill icon="lock">{t('auditor.badge')}</Pill>} />
+      <Header title={t('auditor.title')} actions={
+          <>
+            <TutorialButton disabled={!boot} onClick={tour.start} />
+            <Pill icon="lock">{t('auditor.badge')}</Pill>
+          </>
+        } />
       <main className="container main">{boot && <AuditLog scope="auditor" />}</main>
       <Footer />
+      <AnimatePresence>{tour.open && <Tour surface="auditor" onClose={tour.close} />}</AnimatePresence>
     </div>
   );
 }

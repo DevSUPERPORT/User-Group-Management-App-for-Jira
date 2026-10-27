@@ -42,7 +42,7 @@ export function UsagePanel({ groupId }) {
   const pageIndex = usage?.confluencePages?.index;
 
   return (
-    <div className="stack-12">
+    <div className="stack-12" data-tour="usage">
       <div className="row-between">
         <div className="stack-4">
           <h3 className="eyebrow as-h3">{t('detail.usedIn')}</h3>

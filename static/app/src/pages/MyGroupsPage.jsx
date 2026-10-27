@@ -11,6 +11,7 @@ import { StateScreen } from './StateScreens.jsx';
 import { ease, shake, spring } from '../motion.js';
 import { errorText } from '../features/errors.js';
 import { splitGroupName } from '../features/requests/RequestsPanel.jsx';
+import { Tour, TutorialButton, useTutorial } from '../features/tutorial/Tour.jsx';
 
 const WIDTH = 880;
 const SOON = 7 * 24 * 60 * 60 * 1000;
@@ -28,6 +29,7 @@ export function MyGroupsPage() {
   const [error, setError] = useState(null);
   const [requesting, setRequesting] = useState(null);
   const [busy, setBusy] = useState(null);
+  const tour = useTutorial(Boolean(data?.enabled));
 
   const load = useCallback(() => {
     setError(null);
@@ -63,7 +65,13 @@ export function MyGroupsPage() {
 
   return (
     <div className="page">
-      <Header title={data ? t('my.title', { key: data.project.key }) : ' '} maxWidth={WIDTH} actions={<Pill icon="lock">{t('my.badge')}</Pill>} />
+      <Header title={data ? t('my.title', { key: data.project.key }) : ' '} maxWidth={WIDTH} actions={
+          <>
+            {data?.enabled && <TutorialButton onClick={tour.start} />}
+            <Pill icon="lock">{t('my.badge')}</Pill>
+          </>
+        }
+      />
       <main className="container main stack-16" style={{ maxWidth: WIDTH }}>
         {!data ? (
           [0, 1, 2].map((i) => (
@@ -81,12 +89,12 @@ export function MyGroupsPage() {
           <>
             <p className="muted">{t('my.intro')}</p>
             {data.groups.length === 0 ? (
-              <div className="card empty-state">
+              <div className="card empty-state" data-tour="my-groups">
                 <Icon name="users" size={28} />
                 <p className="muted">{t('my.empty')}</p>
               </div>
             ) : (
-              <motion.ul className="my-list" initial="initial" animate="animate" variants={{ animate: { transition: { staggerChildren: 0.05 } } }}>
+              <motion.ul className="my-list" data-tour="my-groups" initial="initial" animate="animate" variants={{ animate: { transition: { staggerChildren: 0.05 } } }}>
                 {data.groups.map((g) => (
                   <motion.li key={g.groupId} className="card my-card" variants={cardIn}>
                     <div className="row-between wrap">
@@ -182,6 +190,7 @@ export function MyGroupsPage() {
         )}
       </main>
       <Footer maxWidth={WIDTH} />
+      <AnimatePresence>{tour.open && <Tour surface="member" onClose={tour.close} />}</AnimatePresence>
       <AnimatePresence>{requesting && <RequestDialog group={requesting} expiryEnabled={data.expiryEnabled} onClose={() => setRequesting(null)} onDone={onRequested} />}</AnimatePresence>
     </div>
   );

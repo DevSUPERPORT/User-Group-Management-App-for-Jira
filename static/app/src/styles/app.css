@@ -3219,3 +3219,137 @@ button.compliance-card:hover:not(:disabled),
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* ------------------------------------------------------------------ first-run tour */
+.tour-button {
+  height: 36px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.tour-button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--soft);
+}
+.tour-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 70;
+}
+.tour-catcher {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+}
+/* The spotlight dims everything around the target with one oversized shadow. */
+.tour-spot {
+  position: absolute;
+  z-index: 71;
+  border-radius: 12px;
+  box-shadow: 0 0 0 200vmax var(--scrim);
+  pointer-events: none;
+}
+.tour-spot.has-target {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+.tour-card {
+  position: absolute;
+  z-index: 72;
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+.tour-progress {
+  height: 3px;
+  background: var(--soft);
+}
+.tour-progress-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent-bright);
+}
+.tour-content {
+  padding: 18px 20px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tour-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -6px -8px -6px 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tour-close:hover {
+  background: var(--soft);
+  color: var(--text);
+}
+.tour-close:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 1px;
+}
+.tour-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.tour-body {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.tour-points {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.tour-points li {
+  display: flex;
+  gap: 8px;
+}
+.tour-points svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--accent);
+}
+.tour-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px 18px;
+}
+@media (max-width: 640px) {
+  .tour-button span {
+    font-size: 0;
+  }
+  .tour-button .btn-inner {
+    gap: 0;
+  }
+}
+.tour-anchor {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+  visibility: hidden;
+}

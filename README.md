@@ -46,6 +46,7 @@ one-click undo for every change. Jira admins keep global control.
 | 📜 **Audit log** | Append-only, filterable, CSV export, project or global scope, configurable retention. Read-only page for auditors. |
 | 🔒 **Hard guardrails** | Atlassian core and product-access groups are always blocked; IdP/SCIM-synced groups are read-only. |
 | 🤖 **Rovo agent** | 11 actions (list, details, where-used, audit, compliance, create, add/remove, end date, description, requests) — confirms before every change, runs through the same permission checks, tagged "via Rovo". |
+| 🧭 **Built-in guided tour** | First-time users get a step-by-step tour that highlights the real controls, tailored to their page (project admin, member, Jira admin, auditor). Reopen it any time with **Tutorial**. |
 | 🌍 **Native feel** | Follows Jira's light/dark theme and the user's locale (English/German); Jira flags for notifications; respects `prefers-reduced-motion`. |
 
 ## Where it lives in Jira

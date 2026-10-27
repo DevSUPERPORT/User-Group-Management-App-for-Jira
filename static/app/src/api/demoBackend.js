@@ -12,6 +12,8 @@ const ALLOWED = {
   member: ['myGroups', 'requestAccess', 'withdrawRequest'],
   auditor: ['auditorBootstrap', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
 };
+// First-run tutorial: available on every surface.
+for (const list of Object.values(ALLOWED)) list.push('tutorialState', 'markTutorialSeen');
 const MODULES = { project: 'gum-project-settings', admin: 'gum-admin-page', member: 'gum-my-groups', auditor: 'gum-audit' };
 
 // Demo-only governance data: a periodic review (one group overdue), open and

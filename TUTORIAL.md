@@ -10,6 +10,8 @@ A step-by-step guide for first-time users. Find your role, follow the steps, don
 | **Auditor** — I check who had access and when | [Part 4](#part-4--auditors) |
 | **Rovo user** — I prefer to just ask | [Part 5](#part-5--using-the-rovo-agent) |
 
+> 🧭 **Prefer to learn inside the app?** The first time you open any page of the app, a short guided tour starts and points at the real buttons. Click **Tutorial** at the top of the page to run it again.
+
 > **Good to know before you start**
 > - Every change can be undone. Look for the **Undo** button in the notification that appears after each change.
 > - Every change is written to the audit log, with who did it and when.

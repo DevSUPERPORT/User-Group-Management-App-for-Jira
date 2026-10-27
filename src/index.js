@@ -61,6 +61,7 @@ const PROJECT_FUNCTIONS = [
   'completeReview',
 ];
 const SHARED_FUNCTIONS = ['queryAudit', 'auditFilterOptions', 'exportAudit'];
+const TUTORIAL_FUNCTIONS = ['tutorialState', 'markTutorialSeen'];
 const MEMBER_FUNCTIONS = ['myGroups', 'requestAccess', 'withdrawRequest'];
 const AUDITOR_FUNCTIONS = ['auditorBootstrap'];
 const ADMIN_FUNCTIONS = ['adminBootstrap', 'saveConfig', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex'];
@@ -81,6 +82,7 @@ function define(name, allowed) {
 
 PROJECT_FUNCTIONS.forEach((n) => define(n, ['project']));
 SHARED_FUNCTIONS.forEach((n) => define(n, ['project', 'admin', 'auditor']));
+TUTORIAL_FUNCTIONS.forEach((n) => define(n, ['project', 'admin', 'auditor', 'member']));
 MEMBER_FUNCTIONS.forEach((n) => define(n, ['member']));
 AUDITOR_FUNCTIONS.forEach((n) => define(n, ['auditor']));
 ADMIN_FUNCTIONS.forEach((n) => define(n, ['admin']));
