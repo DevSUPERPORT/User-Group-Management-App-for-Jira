@@ -17,6 +17,7 @@ import { CORE_BLOCKED_GROUPS, PRODUCT_ACCESS_PATTERNS, blockingPattern, isFixedE
 import { fullGroupName, parseGroupName, prefixFor, validateNamePart } from './naming.js';
 import { auditRowsToCsv, toCsv } from './csv.js';
 import { indexState, pagesForGroup, resetIndex, runIndexStep } from './confluenceIndex.js';
+import { EXPORT_FORMAT, EXPORT_VERSION, TRANSFER_PREFIXES, checkSameSite, exportAuditPage, exportKvsPage, importAudit, importKvs } from './transfer.js';
 
 export const AuditActions = {
   GROUP_CREATED: 'GROUP_CREATED',
@@ -34,6 +35,8 @@ export const AuditActions = {
   ACCESS_REQUEST_WITHDRAWN: 'ACCESS_REQUEST_WITHDRAWN',
   ACCESS_REQUEST_REOPENED: 'ACCESS_REQUEST_REOPENED',
   ACCESS_REVIEW_COMPLETED: 'ACCESS_REVIEW_COMPLETED',
+  DATA_EXPORTED: 'DATA_EXPORTED',
+  DATA_IMPORTED: 'DATA_IMPORTED',
 };
 
 export const DEFAULT_CONFIG = Object.freeze({
@@ -1458,6 +1461,37 @@ export function createService({ jira, org = null, confluence = null, store, audi
     return { config: next, changed, previous: sanitizeConfig(before) };
   }
 
+  // ---------------------------------------------------------------- data export / import
+
+  // Jira admins only (global "Administer Jira"), checked again on every page of
+  // an export or import. Used to move an installation, e.g. development → production.
+  async function exportData(ctx, { part, cursor = null } = {}) {
+    await requireJiraAdmin(ctx);
+    if (part === 'meta') {
+      const actor = await actorOf(ctx);
+      await writeAudit({ action: AuditActions.DATA_EXPORTED, projectId: '*', actorAccountId: actor.accountId, actorName: actor.displayName });
+      return { format: EXPORT_FORMAT, version: EXPORT_VERSION, cloudId: ctx.cloudId ?? null, exportedAt: now(), exportedBy: actor.displayName, prefixes: TRANSFER_PREFIXES };
+    }
+    if (part === 'kvs') return exportKvsPage(store, cursor);
+    if (part === 'audit') return exportAuditPage(audit, cursor);
+    throw new AppError(ErrorCodes.BAD_REQUEST, 'Unknown export part');
+  }
+
+  async function importData(ctx, { part, entries, cloudId = null, summary = {} } = {}) {
+    await requireJiraAdmin(ctx);
+    checkSameSite(ctx.cloudId, cloudId);
+    if (part === 'kvs') return importKvs(store, entries);
+    if (part === 'audit') return importAudit(audit, entries);
+    if (part === 'finish') {
+      const actor = await actorOf(ctx);
+      const n = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.floor(Number(v))) : 0);
+      const details = { records: n(summary.records), entries: n(summary.entries), skipped: n(summary.skipped), exportedAt: n(summary.exportedAt) || null, exportedBy: summary.exportedBy ? String(summary.exportedBy).slice(0, 255) : null };
+      await writeAudit({ action: AuditActions.DATA_IMPORTED, projectId: '*', actorAccountId: actor.accountId, actorName: actor.displayName, details });
+      return { ok: true };
+    }
+    throw new AppError(ErrorCodes.BAD_REQUEST, 'Unknown import part');
+  }
+
   async function searchGroups(ctx, { query = '' } = {}) {
     await requireJiraAdmin(ctx);
     return { groups: await jira.searchGroups(query.toString().trim(), 20) };
@@ -1564,6 +1598,8 @@ export function createService({ jira, org = null, confluence = null, store, audi
     exportAudit,
     adminBootstrap,
     saveConfig,
+    exportData,
+    importData,
     searchGroups,
     searchProjects,
     testOrgApi,

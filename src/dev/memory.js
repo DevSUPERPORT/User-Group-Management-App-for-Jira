@@ -19,6 +19,12 @@ export function memoryStore(initial = {}) {
     async list(prefix) {
       return [...data.entries()].filter(([k]) => k.startsWith(prefix)).map(([key, value]) => ({ key, value: structuredClone(value) }));
     },
+    async page(prefix, { cursor = null, limit = 100 } = {}) {
+      const keys = [...data.keys()].filter((k) => k.startsWith(prefix)).sort();
+      const start = cursor ? Number(cursor) : 0;
+      const results = keys.slice(start, start + limit).map((key) => ({ key, value: structuredClone(data.get(key)) }));
+      return { results, nextCursor: start + limit < keys.length ? String(start + limit) : null };
+    },
     _dump: () => Object.fromEntries(data),
   };
 }
@@ -55,6 +61,22 @@ export function memoryAudit(initial = []) {
       const map = new Map();
       for (const e of rows) if (e.projectId && e.projectId !== '*') map.set(e.projectId, e.projectKey);
       return [...map.entries()].map(([projectId, projectKey]) => ({ projectId, projectKey }));
+    },
+    async exportPage({ after = null, limit = 200 } = {}) {
+      const asc = [...rows].sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      const from = after ? asc.filter((e) => e.createdAt > after.createdAt || (e.createdAt === after.createdAt && e.id > after.id)) : asc;
+      return structuredClone(from.slice(0, limit));
+    },
+    async importRows(list) {
+      const ids = new Set(rows.map((e) => e.id));
+      let inserted = 0;
+      for (const e of list) {
+        if (ids.has(e.id)) continue;
+        ids.add(e.id);
+        rows.push(structuredClone(e));
+        inserted++;
+      }
+      return inserted;
     },
     async purgeOlderThan(ts) {
       const before = rows.length;

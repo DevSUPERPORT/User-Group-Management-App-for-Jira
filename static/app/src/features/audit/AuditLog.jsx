@@ -27,6 +27,8 @@ const ACTIONS = [
   'ACCESS_REVIEW_COMPLETED',
   'PROJECT_KEY_CHANGED',
   'CONFIG_CHANGED',
+  'DATA_EXPORTED',
+  'DATA_IMPORTED',
 ];
 
 // Small tags that explain why an entry happened (undo, access review, end date).

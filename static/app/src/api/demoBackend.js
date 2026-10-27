@@ -8,7 +8,7 @@ import { createSeed } from '../../../../src/dev/seed.js';
 // Mirrors the per-surface function lists in src/index.js.
 const ALLOWED = {
   project: ['bootstrap', 'checkName', 'createGroup', 'accessMatrix', 'applyAccessChanges', 'getGroup', 'getMembers', 'updateDescription', 'searchUsers', 'addMembers', 'removeMember', 'removeMembers', 'setExpiry', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'decideRequest', 'reopenRequest', 'completeReview', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
-  admin: ['adminBootstrap', 'saveConfig', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
+  admin: ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
   member: ['myGroups', 'requestAccess', 'withdrawRequest'],
   auditor: ['auditorBootstrap', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
 };

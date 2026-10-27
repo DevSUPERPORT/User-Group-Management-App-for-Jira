@@ -158,6 +158,46 @@ export const sqlAudit = {
     return res.rows.map((r) => ({ projectId: r.project_id, projectKey: r.project_key }));
   },
 
+  // Data export: oldest first, keyset paging so entries written meanwhile cannot shift pages.
+  async exportPage({ after = null, limit = 200 } = {}) {
+    await runMigrations();
+    const n = int(limit, 200);
+    const res = after
+      ? await sql
+          .prepare(`SELECT ${COLUMNS} FROM audit_log WHERE created_at > ? OR (created_at = ? AND id > ?) ORDER BY created_at ASC, id ASC LIMIT ${n}`)
+          .bindParams(Number(after.createdAt), Number(after.createdAt), String(after.id))
+          .execute()
+      : await sql.prepare(`SELECT ${COLUMNS} FROM audit_log ORDER BY created_at ASC, id ASC LIMIT ${n}`).execute();
+    return res.rows.map(fromRow);
+  },
+
+  // Data import: keeps the original ids and times; entries that already exist are skipped.
+  async importRows(rows) {
+    await runMigrations();
+    let inserted = 0;
+    for (const e of rows) {
+      const res = await sql
+        .prepare(`INSERT IGNORE INTO audit_log (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bindParams(
+          e.id,
+          e.createdAt,
+          e.projectId ?? '*',
+          e.projectKey,
+          e.action,
+          e.groupId,
+          e.groupName,
+          e.targetAccountId,
+          e.targetName,
+          e.actorAccountId,
+          e.actorName,
+          e.details ? JSON.stringify(e.details) : null,
+        )
+        .execute();
+      inserted += Number(res.rows?.affectedRows ?? 0);
+    }
+    return inserted;
+  },
+
   async purgeOlderThan(timestamp) {
     await runMigrations();
     const res = await sql.prepare('DELETE FROM audit_log WHERE created_at < ?').bindParams(Number(timestamp)).execute();

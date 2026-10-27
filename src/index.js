@@ -35,6 +35,7 @@ function contextOf(req) {
     projectId: ext.project?.id ? String(ext.project.id) : null,
     surface,
     license: req.context?.license ?? null,
+    cloudId: req.context?.cloudId ?? null,
   };
 }
 
@@ -64,7 +65,8 @@ const SHARED_FUNCTIONS = ['queryAudit', 'auditFilterOptions', 'exportAudit'];
 const TUTORIAL_FUNCTIONS = ['tutorialState', 'markTutorialSeen'];
 const MEMBER_FUNCTIONS = ['myGroups', 'requestAccess', 'withdrawRequest'];
 const AUDITOR_FUNCTIONS = ['auditorBootstrap'];
-const ADMIN_FUNCTIONS = ['adminBootstrap', 'saveConfig', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex'];
+// exportData / importData: Jira admin page only, and the service checks "Administer Jira" on every call.
+const ADMIN_FUNCTIONS = ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex'];
 
 const resolver = new Resolver();
 

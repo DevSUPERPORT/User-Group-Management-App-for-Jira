@@ -6,6 +6,14 @@ export const kvsStore = {
   set: (key, value) => kvs.set(key, value),
   delete: (key) => kvs.delete(key),
 
+  // One page of a prefix, for the data export.
+  async page(prefix, { cursor = null, limit = 100 } = {}) {
+    let query = kvs.query().where('key', WhereConditions.beginsWith(prefix)).limit(limit);
+    if (cursor) query = query.cursor(cursor);
+    const res = await query.getMany();
+    return { results: res.results, nextCursor: res.nextCursor ?? null };
+  },
+
   async list(prefix) {
     const out = [];
     let cursor;

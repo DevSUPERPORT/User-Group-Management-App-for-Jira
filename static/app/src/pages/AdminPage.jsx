@@ -6,6 +6,7 @@ import { Footer, Header, Tabs } from '../components/Shell.jsx';
 import { Pill, Skeleton } from '../components/primitives.jsx';
 import { AdminConfig } from '../features/admin/AdminConfig.jsx';
 import { AuditLog } from '../features/audit/AuditLog.jsx';
+import { DataTransfer } from '../features/admin/DataTransfer.jsx';
 import { StateScreen } from './StateScreens.jsx';
 import { ease } from '../motion.js';
 import { Tour, TutorialButton, useTutorial } from '../features/tutorial/Tour.jsx';
@@ -17,6 +18,7 @@ export function AdminPage() {
   const [boot, setBoot] = useState(null);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('config');
+  const [version, setVersion] = useState(0);
   const tour = useTutorial(Boolean(boot));
 
   const load = useCallback(() => {
@@ -81,7 +83,20 @@ export function AdminPage() {
             {tab === 'audit' ? (
               <AuditLog scope="admin" />
             ) : boot ? (
-              <AdminConfig initial={boot} />
+              <div className="stack-20">
+                {/* Remounted after an import so the imported configuration is shown. */}
+                <AdminConfig key={version} initial={boot} />
+                <DataTransfer
+                  onImported={() =>
+                    call('adminBootstrap')
+                      .then((next) => {
+                        setBoot(next);
+                        setVersion((v) => v + 1);
+                      })
+                      .catch(setError)
+                  }
+                />
+              </div>
             ) : (
               <div className="stack-20">
                 {[120, 150, 220, 130].map((h, i) => (
