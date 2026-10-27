@@ -13,7 +13,7 @@ export function AuditorPage() {
   const { t } = useI18n();
   const [boot, setBoot] = useState(null);
   const [error, setError] = useState(null);
-  const tour = useTutorial(Boolean(boot));
+  const tour = useTutorial('auditor', Boolean(boot));
 
   const load = useCallback(() => {
     setError(null);

@@ -32,7 +32,7 @@ export function ProjectPage() {
   const [creating, setCreating] = useState(false);
   const [highlightId, setHighlightId] = useState(null);
   const [pending, setPending] = useState(0);
-  const tour = useTutorial(Boolean(boot));
+  const tour = useTutorial('project', Boolean(boot));
 
   const load = useCallback(() => {
     setError(null);

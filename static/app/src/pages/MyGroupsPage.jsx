@@ -29,7 +29,7 @@ export function MyGroupsPage() {
   const [error, setError] = useState(null);
   const [requesting, setRequesting] = useState(null);
   const [busy, setBusy] = useState(null);
-  const tour = useTutorial(Boolean(data?.enabled));
+  const tour = useTutorial('member', Boolean(data?.enabled));
 
   const load = useCallback(() => {
     setError(null);

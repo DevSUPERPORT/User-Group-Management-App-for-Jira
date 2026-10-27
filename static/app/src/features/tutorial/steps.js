@@ -1,7 +1,7 @@
 // First-run tour per surface. Texts live in i18n under tour.<surface>.<id>.title/.body
-// and, for steps with points, .p1 … .pN. Raise TUTORIAL_VERSION when the tour
-// changes enough that everyone should see it again.
-export const TUTORIAL_VERSION = 1;
+// and, for steps with points, .p1 … .pN. Raise a surface's version when its tour
+// changes enough that its users should see it again.
+export const TUTORIAL_VERSIONS = { project: 1, member: 1, admin: 2, auditor: 1 };
 
 export const TOURS = {
   project: [
@@ -32,6 +32,7 @@ export const TOURS = {
     { id: 'blocked', target: '[aria-labelledby="sec-blocked"]' },
     { id: 'projects', target: '[aria-labelledby="sec-projects"]' },
     { id: 'save', target: '.save-bar' },
+    { id: 'transfer', target: '[aria-labelledby="sec-transfer"]', points: 3 },
     { id: 'audit', target: '#admin-tabs-audit' },
     { id: 'done', target: '[data-tour="help"]' },
   ],

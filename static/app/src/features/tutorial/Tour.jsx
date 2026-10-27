@@ -6,7 +6,7 @@ import { useI18n } from '../../i18n/index.jsx';
 import { Button } from '../../components/primitives.jsx';
 import { Icon } from '../../components/Icon.jsx';
 import { ease } from '../../motion.js';
-import { TOURS, TUTORIAL_VERSION } from './steps.js';
+import { TOURS, TUTORIAL_VERSIONS } from './steps.js';
 
 const GAP = 14; // between target and card
 const PAD = 6; // spotlight padding around the target
@@ -16,7 +16,7 @@ const EDGE = 16; // minimum distance to the page edge
  * Opens the tour once per user and surface, as soon as the page has loaded.
  * `start` reopens it from the "Tutorial" button.
  */
-export function useTutorial(ready) {
+export function useTutorial(surface, ready) {
   const [open, setOpen] = useState(false);
   const checked = useRef(false);
 
@@ -27,15 +27,18 @@ export function useTutorial(ready) {
     if (DEMO && !inForge && new URLSearchParams(window.location.search).get('tour') === 'off') return;
     call('tutorialState')
       .then((res) => {
-        if (!res?.seenVersion || res.seenVersion < TUTORIAL_VERSION) setOpen(true);
+        if (!res?.seenVersion || res.seenVersion < TUTORIAL_VERSIONS[surface]) setOpen(true);
       })
       .catch(() => {});
-  }, [ready]);
+  }, [ready, surface]);
 
-  const close = useCallback((completed) => {
-    setOpen(false);
-    call('markTutorialSeen', { version: TUTORIAL_VERSION, completed }).catch(() => {});
-  }, []);
+  const close = useCallback(
+    (completed) => {
+      setOpen(false);
+      call('markTutorialSeen', { version: TUTORIAL_VERSIONS[surface], completed }).catch(() => {});
+    },
+    [surface],
+  );
 
   return { open, start: useCallback(() => setOpen(true), []), close };
 }

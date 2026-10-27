@@ -179,6 +179,25 @@ At a glance, across all projects: access reviews due, memberships ending within 
 
 > Want Confluence usage checks? Install the app in Confluence on the same site.
 
+### 3.5 Move data to another installation (export & import)
+
+Use this to move everything the app has stored to another installation on the same site, for example from a test installation to production. You get all of it: settings, group assignments, descriptions, end dates, requests, reviews and the full audit log. Only Jira admins see this section.
+
+**Export (in the old installation):**
+1. On the **Configuration** tab, scroll to **Export & import data** → **Export all data**.
+2. Enter a **Passphrase** of at least 12 characters, and type it again under **Repeat passphrase**.
+3. Click **Encrypt & export** and save the file.
+
+**Import (in the new installation):**
+1. In **Export & import data**, click **Import from file…** and pick the file.
+2. Enter the passphrase → **Decrypt**.
+3. Check the summary (number of records and audit entries, who exported it and when).
+4. Tick **I want to import this data into this installation.** → **Import**.
+
+> 🔒 The file is encrypted in your browser with AES-256-GCM, and the passphrase never leaves your browser. Keep the passphrase in your password manager, separate from the file. Without it, nobody can open the file, not even SUPERPORT.
+>
+> If an import stops partway, just run it again. Entries that are already there are skipped, so nothing is duplicated.
+
 ---
 
 ## Part 4 — Auditors

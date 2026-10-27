@@ -19,7 +19,7 @@ export function AdminPage() {
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('config');
   const [version, setVersion] = useState(0);
-  const tour = useTutorial(Boolean(boot));
+  const tour = useTutorial('admin', Boolean(boot));
 
   const load = useCallback(() => {
     setError(null);
