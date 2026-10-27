@@ -21,6 +21,8 @@ A SUPERPORT [Atlassian Forge](https://developer.atlassian.com/platform/forge/) a
 
 ---
 
+> 📘 **New here?** Read the [first-time user tutorial](TUTORIAL.md) — step by step for project admins, members, Jira admins and auditors.
+
 ## Why
 
 In most Jira sites only site admins can create groups or change who is in them, so project admins
