@@ -3,7 +3,7 @@ export function errorText(t, err) {
   const reason = err?.details?.reason;
   if (reason) {
     const reasonKey = `error.reason.${reason}`;
-    const reasonText = t(reasonKey, { message: err?.message ?? '' });
+    const reasonText = t(reasonKey, { message: err?.message ?? '', projects: (err?.details?.projects ?? []).join(', ') });
     if (reasonText !== reasonKey) return reasonText;
   }
   const code = err?.code ?? 'JIRA_ERROR';

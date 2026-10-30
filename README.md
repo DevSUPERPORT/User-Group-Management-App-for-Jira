@@ -14,7 +14,7 @@ A SUPERPORT [Atlassian Forge](https://developer.atlassian.com/platform/forge/) a
 ![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Rovo](https://img.shields.io/badge/Rovo-agent-6554C0)
-![Tests](https://img.shields.io/badge/tests-61%20passing-2EA043)
+![Tests](https://img.shields.io/badge/tests-76%20passing-2EA043)
 ![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20DE-lightgrey)
 
 </div>
@@ -36,7 +36,7 @@ one-click undo for every change. Jira admins keep global control.
 | --- | --- |
 | 🧩 **Project-owned groups** | Create real Atlassian groups named `atlassian-<KEY>-<name>`, with name checks against current *and* previous project keys. |
 | 👥 **Member management** | Search, paging, active/deactivated status, add several people at once, or paste a list of emails/names and review each match before adding. |
-| 🗺️ **People matrix** | "Who is in which group" — plan additions and removals across all project groups, review them, apply as one batch, undo as one batch. |
+| 🗺️ **People matrix** | "Who is in which group" — plan additions and removals across all project groups, select people for bulk actions (add to / remove from group, same groups as…, remove from all), choose which groups are columns, undo each planning step (Ctrl+Z), apply and undo as one batch. |
 | 🔍 **Where-used analysis** | 9 checks: permission schemes, workflows, project roles, issue security levels, notification schemes, shared filters, dashboards, Confluence space permissions and page restrictions. |
 | ⚠️ **Impact before removal** | The confirmation shows exactly which schemes and workflows a person loses access through. |
 | ↩️ **Undo everything** | Every add, remove, end date, review and config change can be undone; failed items get a Retry. |
@@ -44,8 +44,8 @@ one-click undo for every change. Jira admins keep global control.
 | 📨 **Access requests** | Project members request access (with reason and 7/30/90 days); project admins approve or deny. |
 | ✅ **Access reviews** | Periodic reviews (3/6/12 months) with due badges, mandatory confirmation, and audit notes — ISO 27001 friendly. |
 | 📜 **Audit log** | Append-only, filterable, CSV export, project or global scope, configurable retention. Read-only page for auditors. |
-| 🔒 **Hard guardrails** | Atlassian core and product-access groups are always blocked; IdP/SCIM-synced groups are read-only. |
-| 🤖 **Rovo agent** | 11 actions (list, details, where-used, audit, compliance, create, add/remove, end date, description, requests) — confirms before every change, runs through the same permission checks, tagged "via Rovo". |
+| 🔒 **Hard guardrails** | Atlassian core and product-access groups are always blocked; IdP/SCIM-synced groups are read-only; the scope guard stops project admins from adding people to groups that also grant access in other projects. |
+| 🤖 **Rovo agent** | 16 actions (list, details, where-used, audit, compliance, create, add/remove, end date, description, requests, a person's groups, same groups as, offboarding, copy members, undo last change). Bulk actions preview first and apply only with `confirm: true`; same permission checks; tagged "via Rovo". |
 | 🧭 **Built-in guided tour** | First-time users get a step-by-step tour that highlights the real controls, tailored to their page (project admin, member, Jira admin, auditor). Reopen it any time with **Tutorial**. |
 | 🌍 **Native feel** | Follows Jira's light/dark theme and the user's locale (English/German); Jira flags for notifications; respects `prefers-reduced-motion`. |
 

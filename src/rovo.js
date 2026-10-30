@@ -15,4 +15,4 @@ const rovoAudit = {
 
 const actions = createRovoActions(createService({ jira: jiraClient, org: orgClient, confluence: confluenceClient, store: kvsStore, audit: rovoAudit }));
 
-export const { listGroups, groupDetails, whereUsed, auditLog, complianceCheck, createGroup, addMembers, removeMembers, setEndDate, updateDescription, decideRequest } = actions;
+export const { listGroups, groupDetails, whereUsed, auditLog, complianceCheck, createGroup, addMembers, removeMembers, setEndDate, updateDescription, decideRequest, personAccess, copyAccess, offboardPerson, copyMembers, undoLastChange } = actions;

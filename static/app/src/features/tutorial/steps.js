@@ -1,7 +1,7 @@
 // First-run tour per surface. Texts live in i18n under tour.<surface>.<id>.title/.body
 // and, for steps with points, .p1 … .pN. Raise a surface's version when its tour
 // changes enough that its users should see it again.
-export const TUTORIAL_VERSIONS = { project: 1, member: 1, admin: 2, auditor: 1 };
+export const TUTORIAL_VERSIONS = { project: 2, member: 1, admin: 2, auditor: 1 };
 
 export const TOURS = {
   project: [

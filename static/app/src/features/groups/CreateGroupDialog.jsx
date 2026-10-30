@@ -132,17 +132,22 @@ export function CreateGroupDialog({ project, prefix, groups = [], onClose, onCre
               id="group-name"
               type="text"
               value={namePart}
-              maxLength={NAME_PART_MAX + 5}
-              onChange={(e) => setNamePart(normalize(e.target.value))}
+              maxLength={NAME_PART_MAX}
+              onChange={(e) => setNamePart(normalize(e.target.value).slice(0, NAME_PART_MAX))}
               aria-describedby="name-help name-status"
               aria-invalid={check.status === 'bad' || undefined}
               autoComplete="off"
               spellCheck="false"
             />
           </motion.div>
-          <p id="name-help" className="muted small">
-            {t('create.nameHelp')}
-          </p>
+          <div className="row-between">
+            <p id="name-help" className="muted small">
+              {t('create.nameHelp')}
+            </p>
+            <span className={`counter small tabular ${namePart.length >= NAME_PART_MAX ? 'counter-full' : 'muted'}`} aria-hidden="true">
+              {namePart.length}/{NAME_PART_MAX}
+            </span>
+          </div>
         </div>
 
         <div className="preview">

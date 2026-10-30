@@ -74,6 +74,14 @@ export function UsagePanel({ groupId }) {
         </div>
       ) : (
         <>
+          {usage.outsideProject?.length > 0 && (
+            <div className="notice notice-warn" role="note">
+              <Icon name="shield" size={16} />
+              <span>
+                <strong>{t('usage.outside.title', { projects: [...new Set(usage.outsideProject.map((o) => o.projectKey))].join(', ') })}</strong> {t('usage.outside.body')}
+              </span>
+            </div>
+          )}
           {cards.length > 0 && (
             <motion.div className="usage-grid" variants={listParent(0.05, 0.04)} initial="initial" animate="animate">
               {cards.map((c) => {

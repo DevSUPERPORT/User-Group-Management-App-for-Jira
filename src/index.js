@@ -141,4 +141,9 @@ export {
   setEndDate as rovoSetEndDate,
   updateDescription as rovoUpdateDescription,
   decideRequest as rovoDecideRequest,
+  personAccess as rovoPersonAccess,
+  copyAccess as rovoCopyAccess,
+  offboardPerson as rovoOffboardPerson,
+  copyMembers as rovoCopyMembers,
+  undoLastChange as rovoUndoLastChange,
 } from './rovo.js';

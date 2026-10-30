@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { call } from '../../api/client.js';
+import { call, openModule } from '../../api/client.js';
 import { useI18n } from '../../i18n/index.jsx';
 import { Icon } from '../../components/Icon.jsx';
 import { Button, Checkbox } from '../../components/primitives.jsx';
@@ -267,14 +267,24 @@ export function AdminConfig({ initial, onSaved }) {
           <Checkbox id="member-view" checked={draft.memberViewEnabled !== false} onChange={(v) => update({ memberViewEnabled: v })}>
             {t('config.memberView')}
           </Checkbox>
+          <p className="muted small checkbox-hint">{t('config.memberViewWhere')}</p>
           <Checkbox id="expiry-on" checked={draft.expiryEnabled !== false} onChange={(v) => update({ expiryEnabled: v })}>
             {t('config.expiry')}
           </Checkbox>
+          <Checkbox id="scope-guard" checked={draft.scopeGuard !== 'warn'} onChange={(v) => update({ scopeGuard: v ? 'block' : 'warn' })}>
+            {t('config.scopeGuard')}
+          </Checkbox>
+          <p className="muted small checkbox-hint">{t('config.scopeGuardHint')}</p>
         </div>
         <div className="subsection">
           <div className="stack-4">
             <h3 className="label-strong">{t('config.auditors')}</h3>
             <p className="muted small">{t('config.auditorsHint')}</p>
+            <div>
+              <Button size="sm" icon="external" onClick={() => openModule('gum-audit')}>
+                {t('config.openAuditPage')}
+              </Button>
+            </div>
           </div>
           <Chips
             items={draft.auditorGroups ?? []}

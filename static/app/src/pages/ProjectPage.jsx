@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
-import { call } from '../api/client.js';
+import { call, openModule, openRovo } from '../api/client.js';
 import { useI18n } from '../i18n/index.jsx';
 import { Footer, Header, Tabs } from '../components/Shell.jsx';
 import { Button } from '../components/primitives.jsx';
@@ -93,6 +93,12 @@ export function ProjectPage() {
         title={project ? t('project.title', { key: project.key }) : ' '}
         actions={
           <>
+            <Button variant="ghost" icon="eye" disabled={!boot} title={t('project.memberViewHint')} onClick={() => openModule('gum-my-groups', project?.key)}>
+              {t('project.memberView')}
+            </Button>
+            <Button variant="ghost" icon="sparkle" disabled={!boot} title={t('project.askRovoHint')} onClick={() => openRovo(t('project.rovoPrompt', { key: project?.key })).then((ok) => ok || notify({ type: 'info', title: t('project.rovoUnavailable') }))}>
+              {t('project.askRovo')}
+            </Button>
             <TutorialButton
               disabled={!boot}
               onClick={() => {

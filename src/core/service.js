@@ -52,6 +52,11 @@ export const DEFAULT_CONFIG = Object.freeze({
   requestsEnabled: true, // project members may request access from the "My groups" page
   reviewIntervalMonths: null, // null | 3 | 6 | 12: periodic access review per group
   autoRemoveDeactivated: false, // daily: remove deactivated accounts from app-managed groups
+  // Groups are global. When a project group also grants access in other projects
+  // (their permission scheme or project roles), adding people would widen access
+  // beyond the project admin's own project: 'block' stops that for project admins
+  // (Jira admins may still), 'warn' only shows it.
+  scopeGuard: 'block',
 });
 
 const PERIODS = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
@@ -81,6 +86,9 @@ const REVIEW_INTERVALS = [3, 6, 12];
 const REQUEST_DURATIONS = [7, 30, 90];
 const AUTOMATION_GROUP_CAP = 200;
 const REMOVE_REASONS = ['review', 'undo', 'retry', 'bulk'];
+const SCOPE_GUARDS = ['block', 'warn'];
+// Re-adding what this admin just removed restores earlier access; not a widening.
+const SCOPE_EXEMPT_REASONS = ['undo', 'retry'];
 
 const keys = {
   config: 'config',
@@ -286,7 +294,8 @@ export function createService({ jira, org = null, confluence = null, store, audi
       targetName: displayName,
       actorAccountId: actor.accountId,
       actorName: actor.displayName,
-      details,
+      // The end date goes along, so an undo from anywhere (app or Rovo) restores it.
+      details: previousExpiry ? { ...(details ?? {}), previousExpiry } : details,
     });
     return { accountId, displayName, previousExpiry };
   }
@@ -665,8 +674,10 @@ export function createService({ jira, org = null, confluence = null, store, audi
   }
 
   async function addMembers(ctx, { groupId, accountIds = [], expiresAt = null, expiries = {}, reason = null } = {}) {
-    const { project, groupRec, config } = await loadOwnedGroup(ctx, groupId, { write: true });
+    const owned = await loadOwnedGroup(ctx, groupId, { write: true });
+    const { project, groupRec, config } = owned;
     const writer = writerFor();
+    await assertInScope(ctx, owned, reason);
     const defaultExpiry = validateExpiry(expiresAt, config);
     // Undo of a removal restores each person's previous end date, if it still lies ahead.
     const expiryFor = (accountId) => {
@@ -934,7 +945,14 @@ export function createService({ jira, org = null, confluence = null, store, audi
   }
 
   async function getUsage(ctx, { groupId, refresh = false } = {}) {
-    const { groupRec } = await loadOwnedGroup(ctx, groupId);
+    const { groupRec, project, record } = await loadOwnedGroup(ctx, groupId);
+    const usage = await usageOf(groupRec, { refresh });
+    return { ...usage, outsideProject: outsideUses(usage, projectKeysOf(record ?? { key: project.key })) };
+  }
+
+  // Where-used result, cached for USAGE_TTL. No permission check: callers check.
+  async function usageOf(groupRec, { refresh = false } = {}) {
+    const groupId = groupRec.groupId;
     const cached = await store.get(keys.usage(groupId));
     if (!refresh && cached?.v === USAGE_VERSION && now() - cached.at < USAGE_TTL) return { ...cached.data, cachedAt: cached.at };
     const [jiraChecks, confluenceChecks] = await Promise.all([jira.getUsage({ groupId, name: groupRec.name }), confluenceUsage(groupId, groupRec.name)]);
@@ -944,6 +962,37 @@ export function createService({ jira, org = null, confluence = null, store, audi
     const failed = Object.values(data).some((c) => c?.status === 'error');
     if (!failed) await store.set(keys.usage(groupId), { at: now(), v: USAGE_VERSION, data });
     return { ...data, cachedAt: now() };
+  }
+
+  // Grants in other Jira projects: a permission scheme shared with other projects,
+  // or a role in another project. Only checks that ran count; a failed check is
+  // reported as unknown by the where-used panel itself.
+  function outsideUses(usage, ownKeys) {
+    const own = new Set(ownKeys.map((k) => k.toUpperCase()));
+    const out = [];
+    if (usage.permissionSchemes?.status === 'ok') {
+      for (const s of usage.permissionSchemes.items ?? []) {
+        for (const p of s.projects ?? []) if (!own.has(String(p.key).toUpperCase())) out.push({ kind: 'permissionScheme', name: s.name, projectKey: p.key });
+      }
+    }
+    if (usage.projectRoles?.status === 'ok') {
+      for (const r of usage.projectRoles.items ?? []) if (!own.has(String(r.projectKey).toUpperCase())) out.push({ kind: 'projectRole', name: r.role, projectKey: r.projectKey });
+    }
+    return out;
+  }
+
+  // Scope guard for additions by project admins (see DEFAULT_CONFIG.scopeGuard).
+  async function assertInScope(ctx, { groupRec, record, project, config, perms }, reason) {
+    if (perms?.jiraAdmin || config.scopeGuard !== 'block' || SCOPE_EXEMPT_REASONS.includes(reason)) return;
+    const memo = (ctx._scope ??= new Map());
+    if (!memo.has(groupRec.groupId)) {
+      memo.set(groupRec.groupId, usageOf(groupRec).then((u) => outsideUses(u, projectKeysOf(record ?? { key: project.key }))));
+    }
+    const outside = await memo.get(groupRec.groupId);
+    if (outside.length) {
+      const projects = [...new Set(outside.map((o) => o.projectKey))].sort();
+      throw new AppError(ErrorCodes.GROUP_USED_ELSEWHERE, 'The group also grants access in other projects; only a Jira admin can add people to it', { reason: 'USED_ELSEWHERE', projects, uses: outside.slice(0, 20) });
+    }
   }
 
   async function confluenceUsage(groupId, name) {
@@ -1033,6 +1082,13 @@ export function createService({ jira, org = null, confluence = null, store, audi
     }
     const results = [];
     const counts = {};
+    // Warm the where-used cache of every group that gains people, in parallel, so
+    // the scope guard does not check them one after another.
+    const addGroups = [...new Set(clean.filter((c) => c.op === 'add').map((c) => c.groupId))];
+    await Promise.all(addGroups.map(async (id) => {
+      const rec = await store.get(keys.group(id)).catch(() => null);
+      if (rec) await usageOf(rec).catch(() => null);
+    }));
     // Removals first: a person moved between groups never holds both for long.
     const ordered = [...batches.values()].sort((a, b) => (a[0].op === b[0].op ? 0 : a[0].op === 'remove' ? -1 : 1));
     for (const batch of ordered) {
@@ -1439,6 +1495,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
       requestsEnabled: input.requestsEnabled !== false,
       reviewIntervalMonths: REVIEW_INTERVALS.includes(Number(input.reviewIntervalMonths)) ? Number(input.reviewIntervalMonths) : null,
       autoRemoveDeactivated: input.autoRemoveDeactivated === true,
+      scopeGuard: SCOPE_GUARDS.includes(input.scopeGuard) ? input.scopeGuard : 'block',
     };
   }
 

@@ -3,7 +3,8 @@
 // admin only chooses <name>.
 
 export const GROUP_PREFIX = 'atlassian-';
-export const NAME_PART_MAX = 60;
+// Short enough to stay readable in Jira pickers and the people table.
+export const NAME_PART_MAX = 30;
 
 // Lowercase letters, digits and single hyphens; must start and end with a letter or digit.
 const NAME_PART_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;

@@ -115,7 +115,7 @@ export function createSeed(now = Date.now()) {
     'g-admins': {
       permissionSchemes: ok([
         { id: '1', name: 'PROJ Standard', permissions: ['ADMINISTER_PROJECTS', 'DELETE_ISSUES'], projects: [{ key: 'PROJ', name: 'Superport Plattform' }] },
-        { id: '2', name: 'Release Management', permissions: ['MANAGE_SPRINTS_PERMISSION'], projects: [{ key: 'PROJ', name: 'Superport Plattform' }, { key: 'OPS', name: 'Operations' }] },
+        { id: '2', name: 'Release Management', permissions: ['MANAGE_SPRINTS_PERMISSION'], projects: [{ key: 'PROJ', name: 'Superport Plattform' }] },
       ]),
       workflows: none(),
       projectRoles: ok([{ projectKey: 'PROJ', projectName: 'Superport Plattform', role: 'Administrators' }]),
@@ -123,6 +123,17 @@ export function createSeed(now = Date.now()) {
       issueSecurity: ok([{ scheme: 'PROJ Security', level: 'Nur Admins' }]),
       filters: none(),
       dashboards: ok([{ id: '10200', name: 'Release-Cockpit', owner: 'George Papasotiriou', access: 'edit' }]),
+    },
+    // Also grants access in another project (OPS): the scope guard keeps PROJ's
+    // project admins from adding people to it.
+    'g-big': {
+      permissionSchemes: ok([{ id: '3', name: 'Shared Engineering', permissions: ['BROWSE_PROJECTS', 'EDIT_ISSUES'], projects: [{ key: 'PROJ', name: 'Superport Plattform' }, { key: 'OPS', name: 'Operations' }] }]),
+      workflows: none(),
+      projectRoles: ok([{ projectKey: 'OPS', projectName: 'Operations', role: 'Developers' }]),
+      notificationSchemes: none(),
+      issueSecurity: none(),
+      filters: none(),
+      dashboards: none(),
     },
   };
 

@@ -41,7 +41,8 @@ test('naming: validation of the name part', () => {
   assert.equal(validateNamePart('-x'), 'INVALID_EDGES');
   assert.equal(validateNamePart('x-'), 'INVALID_EDGES');
   assert.equal(validateNamePart('a--b'), 'DOUBLE_HYPHEN');
-  assert.equal(validateNamePart('a'.repeat(61)), 'TOO_LONG');
+  assert.equal(validateNamePart('a'.repeat(30)), null);
+  assert.equal(validateNamePart('a'.repeat(31)), 'TOO_LONG');
   assert.deepEqual(parseGroupName('atlassian-PROJ-qa', ['NEU', 'PROJ']).namePart, 'qa');
   assert.equal(parseGroupName('atlassian-PROJX-qa', ['PROJ']), null);
 });

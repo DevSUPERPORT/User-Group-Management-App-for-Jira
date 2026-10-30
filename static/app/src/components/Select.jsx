@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Icon } from './Icon.jsx';
 import { ease } from '../motion.js';
 
@@ -84,8 +84,9 @@ export function Select({ id, label, value, options, onChange }) {
             <Icon name="chevronDown" size={18} />
           </motion.span>
         </button>
-        <AnimatePresence>
-          {open && (
+        {/* No exit animation: a fading list stayed on top of the controls below it
+            and caught their clicks (seen live: "Create group" picked another option). */}
+        {open && (
             <motion.ul
               ref={listRef}
               id={listId}
@@ -97,7 +98,6 @@ export function Select({ id, label, value, options, onChange }) {
               onKeyDown={onKeyDown}
               initial={{ opacity: 0, y: -6, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.2, ease } }}
-              exit={{ opacity: 0, y: -4, scale: 0.98, transition: { duration: 0.12 } }}
             >
               {options.map((o, i) => (
                 <li
@@ -116,7 +116,6 @@ export function Select({ id, label, value, options, onChange }) {
               ))}
             </motion.ul>
           )}
-        </AnimatePresence>
       </div>
     </div>
   );

@@ -93,3 +93,64 @@ test('Rovo: end date, description and request decisions', async () => {
   const none = await rovo.decideRequest({ projectKey: 'PROJ', person: 'Lena Koch', decision: 'approve' }, as());
   assert.equal(none.ok, false);
 });
+
+test('Rovo: person access lists the groups of one person in the project', async () => {
+  const { rovo, as } = setup();
+  const res = await rovo.personAccess({ projectKey: 'PROJ', person: 'Anna Beispiel' }, as());
+  assert.equal(res.ok, true);
+  assert.ok(res.memberOf.some((g) => g.group === 'atlassian-PROJ-reviewer'));
+  assert.ok(!res.memberOf.some((g) => g.group.includes('OPS')), 'other projects stay out');
+  const nobody = await rovo.personAccess({ projectKey: 'PROJ', person: 'Nobody Here' }, as());
+  assert.equal(nobody.code, 'NOT_FOUND');
+});
+
+test('Rovo: bulk actions preview first and change only with confirm', async () => {
+  const { rovo, as, jira } = setup();
+  // Same groups as George (admins + reviewer?) for Mia: preview changes nothing.
+  const preview = await rovo.copyAccess({ projectKey: 'PROJ', fromPerson: 'Anna Beispiel', toPeople: 'Mia Becker' }, as());
+  assert.equal(preview.preview, true);
+  assert.ok(preview.planned.length > 0);
+  assert.ok(preview.planned.every((c) => c.change === 'add' && c.person === 'Mia Becker'));
+  assert.ok(!jira.groups['g-reviewer'].members.includes('u-mia-becker'));
+  const done = await rovo.copyAccess({ projectKey: 'PROJ', fromPerson: 'Anna Beispiel', toPeople: 'Mia Becker', confirm: true }, as());
+  assert.ok(done.results.every((r) => r.status === 'added'));
+  assert.ok(jira.groups['g-reviewer'].members.includes('u-mia-becker'));
+
+  // Undo takes exactly that step back.
+  const undoPreview = await rovo.undoLastChange({ projectKey: 'PROJ' }, as());
+  assert.equal(undoPreview.planned.length, done.results.length);
+  assert.ok(undoPreview.planned.every((c) => c.change === 'remove'));
+  await rovo.undoLastChange({ projectKey: 'PROJ', confirm: 'true' }, as());
+  assert.ok(!jira.groups['g-reviewer'].members.includes('u-mia-becker'));
+});
+
+test('Rovo: offboarding removes one person from every changeable project group; undo restores', async () => {
+  const { rovo, as, jira } = setup();
+  const anna = 'u-anna-beispiel';
+  const before = Object.values(jira.groups).filter((g) => g.members.includes(anna)).map((g) => g.groupId);
+  const preview = await rovo.offboardPerson({ projectKey: 'PROJ', person: 'Anna Beispiel' }, as());
+  assert.ok(preview.planned.every((c) => c.change === 'remove'));
+  assert.ok(jira.groups['g-reviewer'].members.includes(anna), 'preview changes nothing');
+  const res = await rovo.offboardPerson({ projectKey: 'PROJ', person: 'Anna Beispiel', note: 'left the team', confirm: true }, as());
+  assert.ok(res.results.length >= 1 && res.results.every((r) => r.status === 'removed'));
+  assert.ok(!jira.groups['g-reviewer'].members.includes(anna));
+  assert.ok(Object.values(jira.groups).filter((g) => g.members.includes(anna)).every((g) => !g.name.startsWith('atlassian-PROJ-') || g.groupId === 'g-externe'), 'only IdP groups keep her');
+  await rovo.undoLastChange({ projectKey: 'PROJ', confirm: true }, as());
+  const after = Object.values(jira.groups).filter((g) => g.members.includes(anna)).map((g) => g.groupId);
+  assert.deepEqual(after.sort(), before.sort());
+});
+
+test('Rovo: copy members between groups, capped and project-scoped', async () => {
+  const { rovo, as, jira } = setup();
+  const res = await rovo.copyMembers({ projectKey: 'PROJ', fromGroup: 'admins', toGroup: 'reviewer', confirm: true }, as());
+  assert.equal(res.ok, true);
+  for (const id of jira.groups['g-admins'].members) assert.ok(jira.groups['g-reviewer'].members.includes(id));
+  const same = await rovo.copyMembers({ projectKey: 'PROJ', fromGroup: 'admins', toGroup: 'admins' }, as());
+  assert.equal(same.ok, false);
+  const foreign = await rovo.copyMembers({ projectKey: 'PROJ', fromGroup: 'admins', toGroup: 'atlassian-OPS-oncall' }, as());
+  assert.equal(foreign.ok, false);
+  // Undo only ever takes back the caller's own changes, never someone else's.
+  const other = await rovo.undoLastChange({ projectKey: 'PROJ', confirm: true }, as('u-admin'));
+  assert.equal(other.nothingChanged, true);
+  assert.ok(jira.groups['g-reviewer'].members.includes(jira.groups['g-admins'].members[1]));
+});

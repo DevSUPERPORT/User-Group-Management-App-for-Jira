@@ -24,6 +24,7 @@ export const ErrorCodes = {
   ORG_API_UNAUTHORIZED: 'ORG_API_UNAUTHORIZED',
   ORG_API_ERROR: 'ORG_API_ERROR',
   BAD_REQUEST: 'BAD_REQUEST',
+  GROUP_USED_ELSEWHERE: 'GROUP_USED_ELSEWHERE',
 };
 
 /** Wraps a resolver so every error reaches the UI as { error: { code, message, details } }. */

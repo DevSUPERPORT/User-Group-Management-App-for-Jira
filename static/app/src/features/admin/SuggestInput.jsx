@@ -112,7 +112,6 @@ export function SuggestInput({ label, placeholder, buttonLabel, search, onAdd, a
               className="popover picker-list"
               initial={{ opacity: 0, y: -6, scale: 0.985 }}
               animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.2, ease } }}
-              exit={{ opacity: 0, y: -4, transition: { duration: 0.12 } }}
             >
               {items.length === 0 ? (
                 <li className="option is-static muted">{noResults}</li>

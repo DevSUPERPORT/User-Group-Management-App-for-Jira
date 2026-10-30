@@ -127,3 +127,45 @@ test('Create a group with the members of an existing group', async () => {
   assert.equal(await codeOf(service.createGroup(admin(), { namePart: 'copy-foreign', copyFromGroupId: 'g-other' })), 'GROUP_NOT_IN_PROJECT');
   assert.ok(!Object.values(data.groups).some((x) => x.name === 'atlassian-PROJ-copy-foreign'));
 });
+
+test('Scope guard: project admins cannot add people to a group that grants access in other projects', async () => {
+  const { service, data, admin, store } = setup();
+  await service.bootstrap(admin());
+  // Lena is project admin of PROJ only; "alle-entwickler" is also used by OPS (seed).
+  data.perms['u-lena-koch'] = { projectAdminOf: ['10001'] };
+  const lena = () => ({ accountId: 'u-lena-koch', projectId: '10001', surface: 'project', license: null });
+
+  const usage = await service.getUsage(lena(), { groupId: 'g-big' });
+  assert.deepEqual([...new Set(usage.outsideProject.map((o) => o.projectKey))], ['OPS']);
+  assert.deepEqual((await service.getUsage(lena(), { groupId: 'g-reviewer' })).outsideProject, []);
+
+  const err = await service.addMembers(lena(), { groupId: 'g-big', accountIds: ['u-me'] }).catch((e) => e);
+  assert.equal(err.code, 'GROUP_USED_ELSEWHERE');
+  assert.deepEqual(err.details.projects, ['OPS']);
+  assert.ok(!data.groups['g-big'].members.includes('u-me'), 'nothing added');
+
+  // In a batch, the guarded group fails on its own; the rest goes through.
+  const res = await service.applyAccessChanges(lena(), {
+    changes: [
+      { groupId: 'g-big', accountId: 'u-me', op: 'add' },
+      { groupId: 'g-reviewer', accountId: 'u-me', op: 'add' },
+    ],
+  });
+  const by = (g) => res.results.find((r) => r.groupId === g);
+  assert.equal(by('g-big').status, 'failed');
+  assert.equal(by('g-big').code, 'GROUP_USED_ELSEWHERE');
+  assert.equal(by('g-reviewer').status, 'added');
+
+  // Removing people only narrows access: always allowed. Undo restores it again.
+  const someone = data.groups['g-big'].members[0];
+  await service.removeMembers(lena(), { groupId: 'g-big', accountIds: [someone] });
+  await service.addMembers(lena(), { groupId: 'g-big', accountIds: [someone], reason: 'undo' });
+  assert.ok(data.groups['g-big'].members.includes(someone));
+
+  // Jira admins may add; and the guard can be relaxed to "warn".
+  await service.addMembers(admin(), { groupId: 'g-big', accountIds: ['u-me'] });
+  assert.ok(data.groups['g-big'].members.includes('u-me'));
+  await store.set('config', { ...(await store.get('config')), scopeGuard: 'warn' });
+  await service.addMembers(lena(), { groupId: 'g-big', accountIds: ['u-lena-koch'] });
+  assert.ok(data.groups['g-big'].members.includes('u-lena-koch'));
+});

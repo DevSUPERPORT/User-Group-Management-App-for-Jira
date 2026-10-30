@@ -9,10 +9,14 @@ import { useNotify } from '../../components/Toaster.jsx';
 import { ease, shake, spring } from '../../motion.js';
 import { errorText } from '../errors.js';
 import { ExpiryPicker, NO_EXPIRY, expiryFromValue } from '../groups/ExpiryPicker.jsx';
+import { MenuButton, loadHidden, saveHidden } from './MatrixTools.jsx';
 
 const DAY = 24 * 60 * 60 * 1000;
 const SOON = 14 * DAY;
 const MAX_CHANGES = 100;
+// With more groups than this, the table starts with the first ones as columns
+// and the rest a click away ("Columns"), instead of a very wide table.
+const DEFAULT_COLUMNS = 10;
 const keyOf = (groupId, accountId) => `${groupId}|${accountId}`;
 
 // "Who is in which group": every person of the project's groups in one table.
@@ -34,6 +38,11 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
   // The Jira flag offers Undo for 10 seconds only; the last batch stays undoable here.
   const [lastBatch, setLastBatch] = useState(null);
   const [undoing, setUndoing] = useState(false);
+  // Columns hidden by the user (per project, this browser only) and selected rows.
+  const [hidden, setHidden] = useState(null);
+  const [selected, setSelected] = useState(() => new Set());
+  // Earlier states of the staged changes, so every staging step can be undone.
+  const stagedHistory = useRef([]);
 
   const load = useCallback(() => {
     setError(null);
@@ -52,6 +61,19 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
   }, [load]);
 
   const groups = data?.groups ?? [];
+  const projectKey = data?.project?.key;
+  useEffect(() => {
+    if (!data || hidden) return;
+    const stored = loadHidden(data.project.key);
+    const known = new Set(data.groups.map((g) => g.groupId));
+    setHidden(stored ? new Set([...stored].filter((id) => known.has(id))) : new Set(data.groups.slice(DEFAULT_COLUMNS).map((g) => g.groupId)));
+  }, [data, hidden]);
+  const hiddenSet = hidden ?? new Set();
+  const columns = groups.filter((g) => !hiddenSet.has(g.groupId));
+  const changeHidden = (next) => {
+    setHidden(next);
+    if (projectKey) saveHidden(projectKey, next);
+  };
   const people = useMemo(() => {
     if (!data) return [];
     const known = new Set(data.people.map((p) => p.accountId));
@@ -80,23 +102,63 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
     return true;
   });
 
+  // Every staging step goes through here, so it can be undone step by step.
+  const stage = (fn) => {
+    const prev = pending;
+    const next = fn(new Map(prev));
+    if (next === prev) return;
+    if (next.size > MAX_CHANGES) {
+      notify({ type: 'error', title: t('people.tooMany', { count: MAX_CHANGES }) });
+      return;
+    }
+    stagedHistory.current = [...stagedHistory.current.slice(-49), prev];
+    setPending(next);
+  };
+  const undoStep = () => {
+    const prev = stagedHistory.current.pop();
+    if (prev) setPending(prev);
+  };
+  const discardAll = () => {
+    const before = pending;
+    stagedHistory.current = [...stagedHistory.current.slice(-49), before];
+    setPending(new Map());
+    notify({ type: 'info', title: t('matrix.discarded', { count: before.size }), action: { label: t('notify.undo'), onClick: () => setPending(before) } });
+  };
+  // Ctrl/Cmd+Z takes back the last staging step (outside text fields).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName ?? '')) return;
+      if (!stagedHistory.current.length) return;
+      e.preventDefault();
+      setPending(stagedHistory.current.pop());
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Sets the wanted state of one membership: staged only when it differs from
+  // today; asking for today's state drops a staged change.
+  const want = (next, p, g, member) => {
+    if (!editable(g)) return;
+    const k = keyOf(g.groupId, p.accountId);
+    if (member === isMember(p, g)) next.delete(k);
+    else next.set(k, member ? 'add' : 'remove');
+  };
+
   const toggle = (p, g) => {
     if (!editable(g)) return;
-    setPending((prev) => {
-      const next = new Map(prev);
+    stage((next) => {
       const k = keyOf(g.groupId, p.accountId);
       if (next.has(k)) next.delete(k);
-      else if (next.size >= MAX_CHANGES) {
-        notify({ type: 'error', title: t('people.tooMany', { count: MAX_CHANGES }) });
-      } else next.set(k, isMember(p, g) ? 'remove' : 'add');
+      else next.set(k, isMember(p, g) ? 'remove' : 'add');
       return next;
     });
   };
 
   // Offboarding in one click: stage removal from every group that can be changed.
   const removeFromAll = (p) => {
-    setPending((prev) => {
-      const next = new Map(prev);
+    stage((next) => {
       const targets = groups.filter((g) => editable(g) && isMember(p, g));
       const allStaged = targets.length && targets.every((g) => next.get(keyOf(g.groupId, p.accountId)) === 'remove');
       for (const g of targets) {
@@ -107,6 +169,43 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
       return next;
     });
   };
+
+  // Bulk actions on the selected rows. They only stage; the review applies them.
+  const selectedPeople = () => people.filter((p) => selected.has(p.accountId));
+  const bulkSet = (groupId, member) => {
+    const g = groupById(groupId);
+    if (!g) return;
+    stage((next) => {
+      for (const p of selectedPeople()) want(next, p, g, member);
+      return next;
+    });
+    if (hiddenSet.has(groupId)) changeHidden(new Set([...hiddenSet].filter((id) => id !== groupId)));
+  };
+  const bulkRemoveAll = () =>
+    stage((next) => {
+      for (const p of selectedPeople()) for (const g of groups) if (isMember(p, g)) want(next, p, g, false);
+      return next;
+    });
+  // "Same groups as …" (e.g. a new team member like a colleague): adds the
+  // groups the reference person has. Nothing is taken away.
+  const bulkCopyFrom = (accountId) => {
+    const ref = personById(accountId);
+    if (!ref) return;
+    stage((next) => {
+      for (const p of selectedPeople()) {
+        if (p.accountId === ref.accountId) continue;
+        for (const g of groups) if (isMember(ref, g)) want(next, p, g, true);
+      }
+      return next;
+    });
+  };
+  const toggleRow = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const changes = [...pending.entries()].map(([k, op]) => {
     const [groupId, accountId] = k.split('|');
@@ -182,6 +281,8 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
     // Keep only what failed staged, so it can be retried or discarded.
     const failedKeys = new Set(res.results.filter((r) => r.status === 'failed').map((r) => keyOf(r.groupId, r.accountId)));
     setPending((prev) => new Map([...prev].filter(([k]) => failedKeys.has(k))));
+    stagedHistory.current = [];
+    setSelected(new Set());
     setReviewOpen(false);
   };
 
@@ -235,7 +336,44 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
             </button>
           ))}
         </div>
+        {groups.length > 0 && (
+          <MenuButton
+            icon="columns"
+            label={t('matrix.columns', { shown: columns.length, total: groups.length })}
+            placeholder={t('matrix.searchGroups')}
+            items={groups.map((g) => ({ id: g.groupId, label: g.namePart, sub: t('groups.members', { count: g.memberCount ?? 0 }) }))}
+            checked={new Set(columns.map((g) => g.groupId))}
+            onToggle={(id) => {
+              const next = new Set(hiddenSet);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              changeHidden(next);
+            }}
+            align="right"
+            footer={() => (
+              <>
+                <Button size="sm" variant="ghost" onClick={() => changeHidden(new Set())}>
+                  {t('matrix.showAll')}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => changeHidden(new Set(groups.filter((g) => !changes.some((c) => c.groupId === g.groupId)).map((g) => g.groupId)))}>
+                  {t('matrix.hideAll')}
+                </Button>
+              </>
+            )}
+          />
+        )}
       </div>
+
+      {hiddenSet.size > 0 && groups.length > 0 && (
+        <p className="notice matrix-hidden-note">
+          <Icon name="columns" size={16} />
+          <span className="grow">{t('matrix.hiddenNote', { count: groups.filter((g) => hiddenSet.has(g.groupId)).length })}</span>
+          <Button size="sm" variant="ghost" onClick={() => changeHidden(new Set())}>
+            {t('matrix.showAll')}
+          </Button>
+        </p>
+      )}
+
 
       {data?.truncated && (
         <p className="notice notice-warn">
@@ -298,9 +436,21 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
             <thead>
               <tr>
                 <th scope="col" className="matrix-person">
-                  {t('people.person')}
+                  <span className="matrix-person-inner">
+                    <button
+                      type="button"
+                      role="checkbox"
+                      className={`row-check ${visible.length && visible.every((p) => selected.has(p.accountId)) ? 'is-on' : selected.size ? 'is-mixed' : ''}`}
+                      aria-checked={visible.length && visible.every((p) => selected.has(p.accountId)) ? true : selected.size ? 'mixed' : false}
+                      aria-label={t('matrix.selectAll')}
+                      onClick={() => setSelected(visible.every((p) => selected.has(p.accountId)) ? new Set() : new Set(visible.map((p) => p.accountId)))}
+                    >
+                      {visible.length > 0 && visible.every((p) => selected.has(p.accountId)) ? <Icon name="check" size={11} strokeWidth={3.4} /> : selected.size ? <span className="row-check-dash" /> : null}
+                    </button>
+                    {t('people.person')}
+                  </span>
                 </th>
-                {groups.map((g) => (
+                {columns.map((g) => (
                   <th key={g.groupId} scope="col" className="matrix-group">
                     <button type="button" className="matrix-group-btn" title={g.name} onClick={() => onOpenGroup?.(g.groupId)}>
                       <span className="matrix-group-name">{g.namePart}</span>
@@ -327,13 +477,14 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
               <AnimatePresence initial={false}>
                 {visible.map((p) => {
                   const staged = groups.some((g) => pending.has(keyOf(g.groupId, p.accountId)));
+                  const isSel = selected.has(p.accountId);
                   const removable = groups.some((g) => editable(g) && isMember(p, g));
                   return (
                     <motion.tr
                       key={p.accountId}
                       id={`person-${p.accountId}`}
                       layout="position"
-                      className={`${staged ? 'is-staged' : ''} ${flash?.has(`row|${p.accountId}`) ? 'is-flash' : ''}`}
+                      className={`${staged ? 'is-staged' : ''} ${isSel ? 'is-selected' : ''} ${flash?.has(`row|${p.accountId}`) ? 'is-flash' : ''}`}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0, transition: { duration: 0.12 } }}
@@ -341,6 +492,9 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
                     >
                       <th scope="row" className="matrix-person">
                         <span className="matrix-person-inner">
+                          <button type="button" role="checkbox" aria-checked={isSel} aria-label={t('matrix.selectPerson', { name: p.displayName })} className={`row-check ${isSel ? 'is-on' : ''}`} onClick={() => toggleRow(p.accountId)}>
+                            {isSel && <Icon name="check" size={11} strokeWidth={3.4} />}
+                          </button>
                           <Avatar name={p.displayName} url={p.avatarUrl} size={28} dim={!p.active} />
                           <span className="member-text">
                             <span className="break">
@@ -350,7 +504,7 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
                           </span>
                         </span>
                       </th>
-                      {groups.map((g) => {
+                      {columns.map((g) => {
                         const k = keyOf(g.groupId, p.accountId);
                         const op = pending.get(k);
                         const member = isMember(p, g);
@@ -425,8 +579,47 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
         </span>
       </p>
 
-      <AnimatePresence>
-        {changes.length > 0 && (
+      {/* Floating dock: selection actions and staged changes. Fixed to the bottom of
+          the table so opening it never shifts the rows under the pointer. */}
+      <div className="people-dock">
+        <AnimatePresence initial={false}>
+          {selected.size > 0 && (
+            <motion.div className="bulk-bar" role="toolbar" aria-label={t('matrix.bulkLabel')} initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0, transition: { duration: 0.14 } }} transition={spring}>
+              <strong className="bulk-count">{t('matrix.selected', { count: selected.size })}</strong>
+              <MenuButton
+                icon="plus"
+                label={t('matrix.addTo')}
+                placeholder={t('matrix.searchGroups')}
+                items={groups.map((g) => ({ id: g.groupId, label: g.namePart, sub: editable(g) ? null : g.readOnly ? t('groups.idp') : t('groups.syncing'), disabled: !editable(g) }))}
+                onPick={(id) => bulkSet(id, true)}
+              />
+              <MenuButton
+                icon="close"
+                label={t('matrix.removeFrom')}
+                placeholder={t('matrix.searchGroups')}
+                items={groups.map((g) => ({ id: g.groupId, label: g.namePart, disabled: !editable(g) }))}
+                onPick={(id) => bulkSet(id, false)}
+              />
+              <MenuButton
+                icon="copy"
+                label={t('matrix.sameAs')}
+                placeholder={t('matrix.searchPeople')}
+                items={people.map((p) => ({ id: p.accountId, label: p.displayName, sub: t('matrix.groupCount', { count: Object.keys(p.memberships).length }) }))}
+                onPick={bulkCopyFrom}
+                footer={() => <p className="muted small menu-note">{t('matrix.sameAsNote')}</p>}
+              />
+              <Button size="sm" variant="ghost" icon="close" onClick={bulkRemoveAll}>
+                {t('matrix.removeAll')}
+              </Button>
+              <span className="grow" />
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                {t('matrix.clearSelection')}
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {changes.length > 0 && (
           <motion.div className="people-bar" role="status" initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0 }} transition={spring}>
             <span className="grow">
               <strong>{t('people.pending', { count: changes.length })}</strong>
@@ -437,7 +630,10 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
                 {removes > 0 && t('people.removes', { count: removes })}
               </span>
             </span>
-            <Button size="sm" onClick={() => setPending(new Map())}>
+            <Button size="sm" variant="ghost" icon="undo" onClick={undoStep} disabled={!stagedHistory.current.length} title={t('matrix.undoStepHint')}>
+              {t('matrix.undoStep')}
+            </Button>
+            <Button size="sm" onClick={discardAll}>
               {t('people.discard')}
             </Button>
             <Button size="sm" variant="primary" onClick={() => setReviewOpen(true)}>
@@ -446,6 +642,7 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
 
       <AnimatePresence>
         {reviewOpen && (
@@ -630,7 +827,7 @@ function PersonSearch({ onPick, disabled }) {
       </div>
       <AnimatePresence>
         {results.length > 0 && (
-          <motion.ul id="person-search-list" role="listbox" className="person-search-list" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
+          <motion.ul id="person-search-list" role="listbox" className="person-search-list" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16 }}>
             {results.map((u, i) => (
               <li key={u.accountId} role="option" aria-selected={i === active} className={i === active ? 'is-active' : ''} onMouseEnter={() => setActive(i)} onMouseDown={(e) => (e.preventDefault(), pick(u))}>
                 <Avatar name={u.displayName} url={u.avatarUrl} size={24} />

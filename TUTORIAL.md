@@ -81,6 +81,13 @@ The **People** tab shows **Who is in which group**: one row per person, one colu
 1. Click cells to plan changes: an empty cell = *will be added*, a filled cell = *will be removed*.
    - To offboard someone, use **Plan to remove … from all groups** in their row.
    - To add someone not yet in the table, use **Add a person to the table…**.
+   - **Several people at once:** tick their rows. A bar appears at the bottom with **Add to group**, **Remove from group**,
+     **Same groups as…** (e.g. a new colleague gets the groups of an existing team member; nothing is taken away) and
+     **Remove from all groups**.
+   - **Many groups?** The **Groups N/M** button chooses which groups are columns (with search). With more than 10 groups,
+     the first 10 are shown; your choice is remembered in this browser. Bulk actions reach every group, shown or not.
+   - Planned a step by mistake? **Undo step** (or **Ctrl+Z**) takes back the last planning step. **Discard** can be undone
+     from its notification.
 2. Nothing changes yet. When ready, click **Review & apply**.
 3. Set an end date for additions (optional), add a note, tick the confirmation for removals.
 4. Click **Apply N changes**.
@@ -121,7 +128,8 @@ You can also **Export members as CSV** (download icon) from any group.
 
 ## Part 2 — Project members
 
-**Open the app:** your project → sidebar → **My groups**.
+**Open the app:** your project → the tab **My groups** (next to Summary, Board, List …). Project admins can check what
+members see with **Member view** in the app's header.
 
 ### 2.1 See your groups
 
@@ -202,7 +210,8 @@ Use this to move everything the app has stored to another installation on the sa
 
 ## Part 4 — Auditors
 
-**Open the app:** **Apps** (top bar) → **Group audit log**.
+**Open the app:** Jira sidebar → **Apps** (hover to open the list) → **Group audit log**. Jira admins also find an
+**Open the audit log page** button under *Auditor groups* in the app's configuration.
 
 You get a read-only audit log across **all projects**. Filter by **Period**, **Project**, **Group**, **Action** or **Person**, then click **Export CSV**.
 

@@ -13,6 +13,11 @@ import { AppError, ErrorCodes } from './core/errors.js';
 
 export const MAX_ADD = 10;
 export const MAX_REMOVE = 5;
+// Bulk actions (same groups as, offboarding, copy members, undo) answer with a
+// preview first and only change something when called again with confirm: true.
+export const MAX_COPY_MEMBERS = 50;
+const UNDO_WINDOW = 60 * 60 * 1000; // the caller's own changes of the last hour
+const BURST = 2 * 60 * 1000; // changes this close together count as one step
 const DAY = 24 * 60 * 60 * 1000;
 
 const list = (text) =>
@@ -59,6 +64,31 @@ export function createRovoActions(service, { now = () => Date.now() } = {}) {
   };
 
   const groupOf = (ctx, name) => service.findOwnedGroup(ctx, name);
+  const confirmed = (payload) => payload?.confirm === true || /^(true|yes|ja)$/i.test(String(payload?.confirm ?? ''));
+
+  // One person among everyone in the project's groups (exact name or email).
+  function onePerson(people, text) {
+    const hits = people.filter((p) => fold(p.displayName) === fold(text) || (p.email && fold(p.email) === fold(text)));
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) throw new AppError(ErrorCodes.BAD_REQUEST, `Several people match "${text}": ${hits.map((h) => h.email ?? h.displayName).join(', ')}. Please use the email address.`, { reason: 'AMBIGUOUS' });
+    throw new AppError(ErrorCodes.BAD_REQUEST, `"${text}" is not in any group of this project.`, { reason: 'NOT_FOUND' });
+  }
+
+  const editable = (g) => !g.readOnly && g.available !== false;
+
+  // Runs a list of changes (or only previews it) and reports per person and group.
+  async function runChanges(ctx, matrix, changes, { confirm, expiresAt = null, note = '', reason = 'bulk', expiries = {} }) {
+    const groupName = (id) => matrix.groups.find((g) => g.groupId === id)?.name ?? id;
+    const personName = (id) => matrix.people.find((p) => p.accountId === id)?.displayName ?? id;
+    const planned = changes.map((c) => ({ person: personName(c.accountId), group: groupName(c.groupId), change: c.op }));
+    if (!confirm) return { preview: true, nothingChanged: true, planned, next: 'Show this list to the user and call the action again with confirm: true once they agree.' };
+    if (!changes.length) return { planned, results: [], note: 'Nothing to change.' };
+    const res = await service.applyAccessChanges(ctx, { changes, expiresAt, note, reason, expiries });
+    return {
+      results: res.results.map((r) => ({ person: personName(r.accountId), group: r.groupName, change: r.op, status: r.status, why: r.status === 'failed' ? r.error : undefined })),
+      undo: 'Ask me to undo the last change, or use Undo in the app (People tab).',
+    };
+  }
 
   async function memberMatch(ctx, groupId, person) {
     const members = (await service.getMembers(ctx, { groupId, maxResults: 100 })).members;
@@ -217,5 +247,83 @@ export function createRovoActions(service, { now = () => Date.now() } = {}) {
     return { request: { group: res.request.groupName, person: res.request.displayName, status: res.request.status } };
   });
 
-  return { listGroups, groupDetails, whereUsed, auditLog, complianceCheck, createGroup, addMembers, removeMembers, setEndDate, updateDescription, decideRequest };
+  // ---------------------------------------------------------------- people across groups
+
+  const personAccess = action(async ({ payload, ctx, project }) => {
+    const m = await service.accessMatrix(ctx);
+    const p = onePerson(m.people, payload.person);
+    return {
+      project: project.key,
+      person: p.displayName,
+      email: p.email,
+      active: p.active,
+      memberOf: m.groups.filter((g) => p.memberships[g.groupId]).map((g) => ({ group: g.name, until: isoDate(p.memberships[g.groupId].expiresAt) })),
+      notMemberOf: m.groups.filter((g) => !p.memberships[g.groupId]).map((g) => g.name),
+    };
+  });
+
+  // "Give them the same groups as …": adds only, never removes.
+  const copyAccess = action(async ({ payload, ctx }) => {
+    const m = await service.accessMatrix(ctx);
+    const ref = onePerson(m.people, payload.fromPerson);
+    const entries = list(payload.toPeople);
+    if (!entries.length) throw new AppError(ErrorCodes.BAD_REQUEST, 'Tell me who should get the same groups.');
+    if (entries.length > MAX_ADD) throw new AppError(ErrorCodes.BAD_REQUEST, `At most ${MAX_ADD} people per request.`, { reason: 'TOO_MANY' });
+    const expiresAt = parseDate(payload.endDate);
+    const { rows } = await service.resolveUsers(ctx, { entries });
+    const targets = rows.filter((r) => r.status === 'matched').map((r) => r.user);
+    const unclear = rows.filter((r) => r.status !== 'matched').map((r) => ({ input: r.input, why: r.status === 'ambiguous' ? `several people match: ${r.candidates.map((c) => c.displayName).join(', ')}` : 'nobody found' }));
+    const changes = [];
+    for (const u of targets) {
+      const current = m.people.find((p) => p.accountId === u.accountId)?.memberships ?? {};
+      for (const g of m.groups) if (editable(g) && ref.memberships[g.groupId] && !current[g.groupId]) changes.push({ groupId: g.groupId, accountId: u.accountId, op: 'add' });
+    }
+    for (const u of targets) if (!m.people.some((p) => p.accountId === u.accountId)) m.people.push({ ...u, memberships: {} });
+    return { sameGroupsAs: ref.displayName, notChanged: unclear, ...(await runChanges(ctx, m, changes, { confirm: confirmed(payload), expiresAt })) };
+  });
+
+  // Offboarding: one person out of every changeable group of the project.
+  const offboardPerson = action(async ({ payload, ctx }) => {
+    const m = await service.accessMatrix(ctx);
+    const p = onePerson(m.people, payload.person);
+    const changes = m.groups.filter((g) => editable(g) && p.memberships[g.groupId]).map((g) => ({ groupId: g.groupId, accountId: p.accountId, op: 'remove' }));
+    const skipped = m.groups.filter((g) => !editable(g) && p.memberships[g.groupId]).map((g) => ({ group: g.name, why: g.readOnly ? 'synchronised from the identity provider (read-only)' : 'not available yet' }));
+    return { person: p.displayName, notChangeable: skipped, ...(await runChanges(ctx, m, changes, { confirm: confirmed(payload), note: payload.note || 'Offboarding via Rovo' })) };
+  });
+
+  // Copies the members of one project group into another (adds only).
+  const copyMembers = action(async ({ payload, ctx }) => {
+    const [from, to] = await Promise.all([groupOf(ctx, payload.fromGroup), groupOf(ctx, payload.toGroup)]);
+    if (from.groupId === to.groupId) throw new AppError(ErrorCodes.BAD_REQUEST, 'Source and target are the same group.');
+    const m = await service.accessMatrix(ctx);
+    const changes = m.people.filter((p) => p.memberships[from.groupId] && !p.memberships[to.groupId]).map((p) => ({ groupId: to.groupId, accountId: p.accountId, op: 'add' }));
+    if (changes.length > MAX_COPY_MEMBERS) throw new AppError(ErrorCodes.BAD_REQUEST, `${changes.length} people would be added; at most ${MAX_COPY_MEMBERS} at once. Use the People tab in the app for larger moves.`, { reason: 'TOO_MANY' });
+    return { from: from.name, to: to.name, ...(await runChanges(ctx, m, changes, { confirm: confirmed(payload), expiresAt: parseDate(payload.endDate) })) };
+  });
+
+  // Undoes the caller's own most recent membership changes in this project (the
+  // last burst within the past hour), restoring end dates of removed people.
+  const undoLastChange = action(async ({ payload, ctx }) => {
+    const res = await service.queryAudit(ctx, { filters: { from: now() - UNDO_WINDOW }, pageSize: 100 });
+    const mine = res.entries.filter((e) => e.actorAccountId === ctx.accountId && (e.action === 'MEMBER_ADDED' || e.action === 'MEMBER_REMOVED') && e.details?.reason !== 'undo' && e.groupId && e.targetAccountId);
+    if (!mine.length) return { nothingChanged: true, note: 'You made no membership changes in this project during the last hour.' };
+    const latest = Math.max(...mine.map((e) => e.createdAt));
+    const step = mine.filter((e) => e.createdAt >= latest - BURST);
+    const seen = new Set();
+    const changes = [];
+    const expiries = {};
+    for (const e of step) {
+      const k = `${e.groupId}|${e.targetAccountId}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      changes.push({ groupId: e.groupId, accountId: e.targetAccountId, op: e.action === 'MEMBER_ADDED' ? 'remove' : 'add' });
+      if (e.action === 'MEMBER_REMOVED' && e.details?.previousExpiry) expiries[e.targetAccountId] = e.details.previousExpiry;
+    }
+    const m = await service.accessMatrix(ctx);
+    for (const e of step) if (!m.people.some((p) => p.accountId === e.targetAccountId)) m.people.push({ accountId: e.targetAccountId, displayName: e.targetName, memberships: {} });
+    for (const e of step) if (!m.groups.some((g) => g.groupId === e.groupId)) m.groups.push({ groupId: e.groupId, name: e.groupName });
+    return { undoing: `${changes.length} change(s) from ${new Date(latest).toISOString()}`, ...(await runChanges(ctx, m, changes, { confirm: confirmed(payload), reason: 'undo', expiries, note: 'Undo via Rovo' })) };
+  });
+
+  return { listGroups, groupDetails, whereUsed, auditLog, complianceCheck, createGroup, addMembers, removeMembers, setEndDate, updateDescription, decideRequest, personAccess, copyAccess, offboardPerson, copyMembers, undoLastChange };
 }

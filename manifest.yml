@@ -57,12 +57,21 @@ modules:
         - If an action answers ok:false, explain the error in plain words; nothing was changed.
         - After a change, mention that it is recorded in the audit log and that it can be undone in the app.
         - Before removing people, offer to show where the group is used (the where-used action), so the user sees what access they lose.
+        - The bulk actions (same groups as another person, offboard a person, copy members between groups, undo the last change)
+          work in two steps: call them first WITHOUT confirm, show the returned "planned" list, ask the user, and only then call
+          the same action again with confirm: true. Never set confirm: true on the first call.
+        - If an addition fails with GROUP_USED_ELSEWHERE, explain that the group also grants access in the listed other projects,
+          so only a Jira admin can add people to it; project admins only manage access within their own project.
+        - When the user says they made a mistake, offer "undo the last change".
         Answer in the user's language (German or English), short and clear, using lists for several items.
       conversationStarters:
         - Which groups exist in my project and who is in them?
         - Where is a group used (workflows, schemes, Confluence)?
         - Add people to a group for 30 days
         - Show pending access requests and expiring memberships
+        - Give a new colleague the same groups as an existing team member
+        - Remove someone who left from all groups of my project
+        - Undo my last change
       actions:
         - gum-list-groups
         - gum-group-details
@@ -75,6 +84,11 @@ modules:
         - gum-set-end-date
         - gum-update-description
         - gum-decide-request
+        - gum-person-access
+        - gum-copy-access
+        - gum-offboard-person
+        - gum-copy-members
+        - gum-undo-last-change
 
   action:
     - key: gum-list-groups
@@ -309,6 +323,127 @@ modules:
           required: false
           description: Note for the requester and the audit log
 
+    - key: gum-person-access
+      name: Show a person's groups
+      function: rovo-person-access
+      actionVerb: GET
+      description: Shows which groups of the project a person is in (with end dates) and which they are not in.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        person:
+          title: Person
+          type: string
+          required: true
+          description: Name or email of the person
+    - key: gum-copy-access
+      name: Give people the same groups as someone
+      function: rovo-copy-access
+      actionVerb: CREATE
+      description: Adds up to 10 people to every project group a reference person is in (adds only, nothing is removed). First call previews; call again with confirm true after the user agreed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        fromPerson:
+          title: Reference person
+          type: string
+          required: true
+          description: Name or email of the person whose groups are copied
+        toPeople:
+          title: People
+          type: string
+          required: true
+          description: Names or emails of the people who get the same groups, comma separated
+        endDate:
+          title: End date
+          type: string
+          required: false
+          description: Optional end of access as YYYY-MM-DD
+        confirm:
+          title: Confirm
+          type: boolean
+          required: false
+          description: Leave empty for a preview. true only after the user agreed to the previewed list.
+    - key: gum-offboard-person
+      name: Remove a person from all project groups
+      function: rovo-offboard-person
+      actionVerb: DELETE
+      description: Removes one person from every changeable group of the project (offboarding). First call previews; call again with confirm true after the user agreed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        person:
+          title: Person
+          type: string
+          required: true
+          description: Name or email of the person
+        note:
+          title: Note
+          type: string
+          required: false
+          description: Reason, stored in the audit log
+        confirm:
+          title: Confirm
+          type: boolean
+          required: false
+          description: Leave empty for a preview. true only after the user agreed to the previewed list.
+    - key: gum-copy-members
+      name: Copy members between groups
+      function: rovo-copy-members
+      actionVerb: CREATE
+      description: Adds the members of one project group to another project group (up to 50, adds only). First call previews; call again with confirm true after the user agreed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        fromGroup:
+          title: From group
+          type: string
+          required: true
+          description: Short or full name of the source group
+        toGroup:
+          title: To group
+          type: string
+          required: true
+          description: Short or full name of the target group
+        endDate:
+          title: End date
+          type: string
+          required: false
+          description: Optional end of access as YYYY-MM-DD
+        confirm:
+          title: Confirm
+          type: boolean
+          required: false
+          description: Leave empty for a preview. true only after the user agreed to the previewed list.
+    - key: gum-undo-last-change
+      name: Undo my last change
+      function: rovo-undo-last-change
+      actionVerb: UPDATE
+      description: Reverses the caller's own most recent membership changes in the project (within the last hour), restoring end dates. First call previews; call again with confirm true after the user agreed.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: Key of the Jira project
+        confirm:
+          title: Confirm
+          type: boolean
+          required: false
+          description: Leave empty for a preview. true only after the user agreed to the previewed list.
+
   function:
     - key: resolver
       handler: index.handler
@@ -344,6 +479,16 @@ modules:
       handler: index.rovoUpdateDescription
     - key: rovo-decide-request
       handler: index.rovoDecideRequest
+    - key: rovo-person-access
+      handler: index.rovoPersonAccess
+    - key: rovo-copy-access
+      handler: index.rovoCopyAccess
+    - key: rovo-offboard-person
+      handler: index.rovoOffboardPerson
+    - key: rovo-copy-members
+      handler: index.rovoCopyMembers
+    - key: rovo-undo-last-change
+      handler: index.rovoUndoLastChange
   scheduledTrigger:
     - key: audit-retention
       function: retention
