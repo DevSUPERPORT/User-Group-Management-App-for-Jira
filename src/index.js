@@ -2,16 +2,16 @@ import ResolverExport from '@forge/resolver';
 import { createService } from './core/service.js';
 import { toErrorPayload } from './core/errors.js';
 import { jiraClient } from './forge/jiraClient.js';
-import { orgClient } from './forge/orgClient.js';
+import { createOrgClient } from './forge/orgClient.js';
 import { confluenceClient } from './forge/confluenceClient.js';
-import { kvsStore } from './forge/kvsStore.js';
+import { kvsSecrets, kvsStore } from './forge/kvsStore.js';
 import { runMigrations, sqlAudit } from './forge/sqlAudit.js';
 
 // The package is "type": "module", so the bundler hands over the CommonJS exports
 // object of @forge/resolver as the default import; the class sits on .default.
 const Resolver = ResolverExport.default ?? ResolverExport;
 
-const service = createService({ jira: jiraClient, org: orgClient, confluence: confluenceClient, store: kvsStore, audit: sqlAudit });
+const service = createService({ jira: jiraClient, org: createOrgClient({ secrets: kvsSecrets }), confluence: confluenceClient, store: kvsStore, audit: sqlAudit });
 
 const ADMIN_MODULE = 'gum-admin-page';
 const MEMBER_MODULE = 'gum-my-groups';
@@ -66,7 +66,7 @@ const TUTORIAL_FUNCTIONS = ['tutorialState', 'markTutorialSeen'];
 const MEMBER_FUNCTIONS = ['myGroups', 'requestAccess', 'withdrawRequest'];
 const AUDITOR_FUNCTIONS = ['auditorBootstrap'];
 // exportData / importData: Jira admin page only, and the service checks "Administer Jira" on every call.
-const ADMIN_FUNCTIONS = ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex'];
+const ADMIN_FUNCTIONS = ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'saveOrgConnection', 'removeOrgConnection', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex'];
 
 const resolver = new Resolver();
 

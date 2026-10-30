@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion, useIsPresent } from 'framer-motion';
 import { DEMO, call, inForge } from '../../api/client.js';
 import { useI18n } from '../../i18n/index.jsx';
 import { Button } from '../../components/primitives.jsx';
@@ -93,6 +93,8 @@ export function Tour({ surface, onClose }) {
   const cardBelowRef = useRef(true);
   const primaryRef = useRef(null);
   const restoreRef = useRef(document.activeElement);
+  // Closing must never leave a click-catching layer behind (see Modal).
+  const isPresent = useIsPresent();
 
   const step = steps[index];
   const last = index === steps.length - 1;
@@ -183,12 +185,14 @@ export function Tour({ surface, onClose }) {
   const cardHeight = card?.height ?? 240;
   const spanTop = Math.min(spot.top, pos.top);
   const spanBottom = Math.max(spot.top + spot.height, pos.top + cardHeight);
-  cardBelowRef.current = pos.top >= spot.top;
+  // The card ends the span only when it sits below the target; beside a tall target
+  // it is top-aligned, and scrolling to the span's end would hide it.
+  cardBelowRef.current = pos.top + cardHeight >= spot.top + spot.height;
   const move = reduce ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 32 };
   const points = Array.from({ length: step.points ?? 0 }, (_, i) => t(key(`p${i + 1}`)));
 
   return createPortal(
-    <div className="tour-layer" onKeyDown={onKeyDown}>
+    <div className={`tour-layer ${isPresent ? '' : 'is-leaving'}`} onKeyDown={isPresent ? onKeyDown : undefined}>
       <motion.div className="tour-catcher" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-hidden="true" />
       <div ref={anchorRef} className="tour-anchor" style={{ top: spanTop - EDGE, height: spanBottom - spanTop + 2 * EDGE }} aria-hidden="true" />
       <motion.div

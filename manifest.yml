@@ -548,7 +548,7 @@ app:
   id: ari:cloud:ecosystem::app/dc5e1b22-ba7a-4f79-803d-48d73eee2104
   runtime:
     name: nodejs22.x
-  # Enable before listing as a paid Marketplace app; the service then rejects
-  # write operations when context.license.isActive is false.
-  # licensing:
-  #   enabled: true
+  # Paid Marketplace app (prices are set in the partner portal). The service
+  # rejects write operations when context.license.isActive is false.
+  licensing:
+    enabled: true

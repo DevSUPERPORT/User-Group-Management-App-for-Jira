@@ -114,12 +114,13 @@ export function createService({ jira, org = null, confluence = null, store, audi
   // Group writes (create group, add/remove members) go through the Atlassian
   // Organization Admin API: Atlassian rejects them from apps via the Jira REST API
   // (verified on superportdev). Reads keep using the Jira REST API.
-  function orgReady() {
-    return Boolean(org && org.isConfigured());
+  // Each installation stores its own organization connection (admin page).
+  async function orgReady() {
+    return Boolean(org && (await org.isConfigured()));
   }
-  function writerFor() {
-    if (!orgReady()) {
-      throw new AppError(ErrorCodes.ORG_API_NOT_CONFIGURED, 'ORG_ID / ORG_API_KEY are not set');
+  async function writerFor() {
+    if (!(await orgReady())) {
+      throw new AppError(ErrorCodes.ORG_API_NOT_CONFIGURED, 'The organization connection is not set up');
     }
     return org;
   }
@@ -433,10 +434,14 @@ export function createService({ jira, org = null, confluence = null, store, audi
           } catch (err) {
             if (err?.code === ErrorCodes.GROUP_NOT_FOUND) {
               // Deleted natively in Atlassian Administration, or not yet known to
-              // Jira. Forget it only after it stayed missing for the grace period.
+              // Jira. A group older than a few minutes that the organization's
+              // directory does not know either is gone at once; otherwise it is
+              // forgotten only after it stayed missing for the grace period.
               const missingSince = g.missingSince ?? now();
               const fresh = g.createdAt && now() - g.createdAt < MISSING_GRACE;
-              if (!fresh && now() - missingSince >= MISSING_GRACE) {
+              const settled = !g.createdAt || now() - g.createdAt >= FRESH_GROUP;
+              const deleted = settled && (await orgReady()) && (await org.groupExists(g.groupId, g.name).catch(() => true)) === false;
+              if (deleted || (!fresh && now() - missingSince >= MISSING_GRACE)) {
                 gone.push(g.groupId);
                 return null;
               }
@@ -492,7 +497,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
     if (!check.available) throw new AppError(ErrorCodes.NAME_TAKEN, 'Group name already exists', { conflict: check.conflict });
 
     const { project, record, config } = await requireProjectAdmin(ctx);
-    const writer = writerFor();
+    const writer = await writerFor();
     const actor = await actorOf(ctx);
     // Preflight for "start with the members of …": the source must be a group of
     // this project and small enough, checked before anything is created.
@@ -590,7 +595,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
     let { groupRec } = loaded;
     // With the Organization API available, its externalSynced / modifiable flags
     // are the authoritative IdP signal.
-    if (orgReady() && !groupRec.idpManaged) {
+    if (!groupRec.idpManaged && (await orgReady())) {
       const meta = await org.getGroupMeta(groupId, groupRec.name).catch(() => null);
       if (meta && (meta.externalSynced || !meta.modifiable)) {
         groupRec = { ...groupRec, idpManaged: true };
@@ -676,7 +681,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
   async function addMembers(ctx, { groupId, accountIds = [], expiresAt = null, expiries = {}, reason = null } = {}) {
     const owned = await loadOwnedGroup(ctx, groupId, { write: true });
     const { project, groupRec, config } = owned;
-    const writer = writerFor();
+    const writer = await writerFor();
     await assertInScope(ctx, owned, reason);
     const defaultExpiry = validateExpiry(expiresAt, config);
     // Undo of a removal restores each person's previous end date, if it still lies ahead.
@@ -734,7 +739,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
 
   async function removeMember(ctx, { groupId, accountId } = {}) {
     const { project, groupRec, config } = await loadOwnedGroup(ctx, groupId, { write: true });
-    const writer = writerFor();
+    const writer = await writerFor();
     if (!accountId) throw new AppError(ErrorCodes.BAD_REQUEST, 'accountId missing');
     const actor = await actorOf(ctx);
     const removed = await removeOne({ project, groupRec, writer, actor }, accountId, null);
@@ -745,7 +750,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
   // Removes several members: used by the access review and by "undo" of an add.
   async function removeMembers(ctx, { groupId, accountIds = [], note = '', reason = 'review' } = {}) {
     const { project, groupRec, config } = await loadOwnedGroup(ctx, groupId, { write: true });
-    const writer = writerFor();
+    const writer = await writerFor();
     const ids = [...new Set(accountIds.filter((id) => typeof id === 'string' && id))];
     if (!ids.length) throw new AppError(ErrorCodes.BAD_REQUEST, 'No users given');
     if (ids.length > MAX_BULK_REMOVE) {
@@ -1266,7 +1271,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
     const actor = await actorOf(ctx);
     if (request.status === 'approved') {
       const { groupRec } = await loadOwnedGroup(ctx, request.groupId, { write: true });
-      await removeOne({ project, groupRec, writer: writerFor(), actor }, request.accountId, { reason: 'undo', requestId });
+      await removeOne({ project, groupRec, writer: await writerFor(), actor }, request.accountId, { reason: 'undo', requestId });
     }
     const next = { ...request, status: 'pending', decidedAt: null, decidedBy: null, note: null };
     await store.set(key, next);
@@ -1333,7 +1338,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
   async function runAutomation() {
     const config = await getConfig();
     if (!config.autoRemoveDeactivated) return { removed: 0, skipped: 'disabled' };
-    if (!orgReady()) return { removed: 0, skipped: 'org-api-not-configured' };
+    if (!(await orgReady())) return { removed: 0, skipped: 'org-api-not-configured' };
     let removed = 0;
     for (const item of await deactivatedMembers()) {
       try {
@@ -1456,7 +1461,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
       config,
       defaults: { coreBlockedGroups: CORE_BLOCKED_GROUPS, productAccessPatterns: PRODUCT_ACCESS_PATTERNS },
       stats: { managedGroups: managed.length, projects: projects.size },
-      orgApi: { configured: Boolean(org?.isConfigured()) },
+      orgApi: org ? await org.status() : { configured: false },
       compliance: await complianceOverview(),
       confluence: { available: Boolean(confluence && (await confluence.isAvailable())) },
     };
@@ -1464,13 +1469,45 @@ export function createService({ jira, org = null, confluence = null, store, audi
 
   async function testOrgApi(ctx) {
     await requireJiraAdmin(ctx);
-    if (!org || !org.isConfigured()) return { configured: false, ok: false };
+    if (!(await orgReady())) return { configured: false, ok: false };
     try {
       const res = await org.check();
       return { configured: true, ok: Boolean(res.directoryId), directories: res.directories, directoryId: res.directoryId };
     } catch (err) {
       return { configured: true, ok: false, error: { code: err.code ?? ErrorCodes.ORG_API_ERROR, message: err.message } };
     }
+  }
+
+  // Stores this site's organization ID + API key (validated against Atlassian
+  // first). The key is never returned or logged; the audit entry names the org only.
+  async function saveOrgConnection(ctx, { orgId, apiKey, directoryId = null } = {}) {
+    await requireJiraAdmin(ctx);
+    if (!org) throw new AppError(ErrorCodes.ORG_API_NOT_CONFIGURED, 'No organization client');
+    const actor = await actorOf(ctx);
+    const status = await org.connect({ orgId, apiKey, directoryId }, { accountId: actor.accountId, displayName: actor.displayName });
+    await writeAudit({
+      action: AuditActions.CONFIG_CHANGED,
+      projectId: '*',
+      actorAccountId: actor.accountId,
+      actorName: actor.displayName,
+      details: { changed: ['orgConnection'], orgId: status.orgId, directoryId: status.directoryId },
+    });
+    return status;
+  }
+
+  async function removeOrgConnection(ctx) {
+    await requireJiraAdmin(ctx);
+    if (!org) return { configured: false };
+    const actor = await actorOf(ctx);
+    const status = await org.disconnect();
+    await writeAudit({
+      action: AuditActions.CONFIG_CHANGED,
+      projectId: '*',
+      actorAccountId: actor.accountId,
+      actorName: actor.displayName,
+      details: { changed: ['orgConnection'], removed: true },
+    });
+    return status;
   }
 
   function sanitizeConfig(input = {}) {
@@ -1590,7 +1627,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
         continue;
       }
       try {
-        await writerFor().removeMember(value.groupId, value.accountId, groupRec.name);
+        await (await writerFor()).removeMember(value.groupId, value.accountId, groupRec.name);
       } catch (err) {
         if (err?.code === ErrorCodes.GROUP_NOT_FOUND) {
           await store.delete(key); // nothing left to remove
@@ -1660,6 +1697,8 @@ export function createService({ jira, org = null, confluence = null, store, audi
     searchGroups,
     searchProjects,
     testOrgApi,
+    saveOrgConnection,
+    removeOrgConnection,
     runRetention,
     runExpiry,
     runAutomation,

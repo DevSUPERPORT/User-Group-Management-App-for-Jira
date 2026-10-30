@@ -180,7 +180,7 @@ export function UserPicker({ knownMemberIds, onSubmit }) {
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0, transition: { duration: 0.22, ease, delay: i * 0.02 } }}
                     >
-                      {i === active && <motion.span layoutId={`${listId}-hl`} className="option-hl" transition={{ type: 'spring', stiffness: 700, damping: 48 }} />}
+                      {i === active && <span className="option-hl" />}
                       <Avatar name={u.displayName} url={u.avatarUrl} size={30} dim={!u.active} />
                       <span className="user-option-text">
                         <span>{u.displayName}</span>

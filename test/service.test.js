@@ -239,6 +239,20 @@ test('groups deleted natively disappear only after staying missing for the grace
   assert.equal(await store.get('group:g-admins'), undefined);
 });
 
+test('a group deleted in Atlassian Administration disappears at once when the organization confirms it', async () => {
+  const seed = createSeed(NOW);
+  const store = memoryStore(seed.store);
+  const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira), store, audit: memoryAudit([]), now: () => NOW });
+  const ctx = { accountId: 'u-me', projectId: '10001', surface: 'project', license: null };
+  await service.bootstrap({ ...ctx });
+  delete seed.jira.groups['g-admins'];
+
+  const res = await service.bootstrap({ ...ctx });
+  assert.ok(!res.groups.some((g) => g.groupId === 'g-admins'));
+  assert.equal(await store.get('group:g-admins'), undefined);
+  assert.ok(!(await store.get('project:10001')).groupIds.includes('g-admins'));
+});
+
 test('a freshly created group that Jira does not know yet stays listed and reports syncing', async () => {
   const seed = createSeed(NOW);
   const jira = memoryJira(seed.jira);
@@ -312,6 +326,37 @@ test('Org API: connection test is admin-only and reports configuration; config s
   withOrg.jiraState.perms['u-pa'] = { jiraAdmin: false, projectAdminOf: ['10001'] };
   withOrg.jiraState.users['u-pa'] = { accountId: 'u-pa', displayName: 'PA' };
   assert.equal(await codeOf(withOrg.service.testOrgApi(withOrg.ctx({ accountId: 'u-pa', surface: 'admin' }))), 'NOT_ADMIN');
+});
+
+test('Org connection: per site, Jira admins only, validated, audited without the key', async () => {
+  const admin = (c) => c({ surface: 'admin', projectId: null });
+  const { service, ctx, jiraState, audit } = setup({ org: 'unconfigured', store: ORG_CONFIG() });
+  assert.deepEqual((await service.adminBootstrap(admin(ctx))).orgApi, { configured: false });
+  await service.bootstrap(ctx());
+  assert.equal(await codeOf(service.createGroup(ctx(), { namePart: 'neu' })), 'ORG_API_NOT_CONFIGURED');
+
+  jiraState.perms['u-pa'] = { jiraAdmin: false, projectAdminOf: ['10001'] };
+  jiraState.users['u-pa'] = { accountId: 'u-pa', displayName: 'PA' };
+  assert.equal(await codeOf(service.saveOrgConnection(ctx({ accountId: 'u-pa', surface: 'admin' }), { orgId: 'org-x', apiKey: 'k' })), 'NOT_ADMIN');
+  assert.equal(await codeOf(service.saveOrgConnection(admin(ctx), { orgId: 'org-x', apiKey: 'invalid' })), 'ORG_API_UNAUTHORIZED');
+  const multi = await service.saveOrgConnection(admin(ctx), { orgId: 'org-multi', apiKey: 'k' }).catch((e) => e);
+  assert.equal(multi.code, 'ORG_DIRECTORY_REQUIRED');
+  assert.equal(multi.details.directories.length, 2);
+
+  const status = await service.saveOrgConnection(admin(ctx), { orgId: 'org-multi', apiKey: 'top-secret', directoryId: 'dir-2' });
+  assert.equal(status.configured, true);
+  assert.equal(status.directoryName, 'Partners');
+  assert.equal(JSON.stringify(status).includes('top-secret'), false);
+  assert.equal((await service.adminBootstrap(admin(ctx))).orgApi.orgId, 'org-multi');
+  const rows = (await audit.query({ action: 'CONFIG_CHANGED' })).entries;
+  assert.ok(rows.some((e) => e.details?.changed?.includes('orgConnection')));
+  assert.equal(JSON.stringify(rows).includes('top-secret'), false);
+
+  assert.equal((await service.createGroup(ctx(), { namePart: 'neu' })).name, 'atlassian-PROJ-neu');
+
+  assert.equal(await codeOf(service.removeOrgConnection(ctx({ accountId: 'u-pa', surface: 'admin' }))), 'NOT_ADMIN');
+  assert.deepEqual(await service.removeOrgConnection(admin(ctx)), { configured: false });
+  assert.equal(await codeOf(service.createGroup(ctx(), { namePart: 'noch-eine' })), 'ORG_API_NOT_CONFIGURED');
 });
 
 test('UC-01: a failed "add me" after creating the group is reported, not swallowed', async () => {

@@ -17,6 +17,7 @@ import { errorText } from '../features/errors.js';
 import { Tour, TutorialButton, useTutorial } from '../features/tutorial/Tour.jsx';
 
 const TAB_ORDER = ['groups', 'people', 'requests', 'audit'];
+const REFRESH_MS = 10000;
 
 export function ProjectPage() {
   const { t } = useI18n();
@@ -29,7 +30,8 @@ export function ProjectPage() {
   const [tab, setTab] = useState('groups');
   const [tabDir, setTabDir] = useState(1);
   const [auditPreset, setAuditPreset] = useState(null);
-  const [creating, setCreating] = useState(false);
+  // A number per opening: a fresh dialog every time, never a still-closing one.
+  const [creating, setCreating] = useState(0);
   const [highlightId, setHighlightId] = useState(null);
   const [pending, setPending] = useState(0);
   const tour = useTutorial('project', Boolean(boot));
@@ -47,6 +49,40 @@ export function ProjectPage() {
   }, []);
 
   useEffect(load, [load]);
+
+  // Keeps the group list current, e.g. groups deleted in Atlassian Administration
+  // disappear by themselves: right away when the user comes back to this tab or
+  // window (deleting happens in another tab), and every 10 seconds while it is open.
+  // Quiet: no loading state, selection and search stay; paused while the page is
+  // hidden, a dialog or the tour is open, or on other tabs.
+  const busy = Boolean(creating) || tour.open || tab !== 'groups' || !boot;
+  useEffect(() => {
+    if (busy) return undefined;
+    let inFlight = false;
+    const refresh = () => {
+      if (inFlight || document.hidden) return;
+      inFlight = true;
+      call('bootstrap')
+        .then((res) => {
+          setGroups(res.groups);
+          setPending(res.pendingRequests ?? 0);
+          setSelectedId((id) => (res.groups.some((g) => g.groupId === id) ? id : res.groups[0]?.groupId ?? null));
+        })
+        .catch(() => {})
+        .finally(() => {
+          inFlight = false;
+        });
+    };
+    const timer = setInterval(refresh, REFRESH_MS);
+    const onReturn = () => !document.hidden && refresh();
+    document.addEventListener('visibilitychange', onReturn);
+    window.addEventListener('focus', onReturn);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onReturn);
+      window.removeEventListener('focus', onReturn);
+    };
+  }, [busy]);
 
   const switchTab = (next) => {
     setTabDir(TAB_ORDER.indexOf(next) >= TAB_ORDER.indexOf(tab) ? 1 : -1);
@@ -69,7 +105,7 @@ export function ProjectPage() {
   }, []);
 
   const onCreated = (group) => {
-    setCreating(false);
+    setCreating(0);
     setGroups((gs) => [...gs, group].sort((a, b) => a.namePart.localeCompare(b.namePart)));
     setQuery('');
     setSelectedId(group.groupId);
@@ -106,7 +142,7 @@ export function ProjectPage() {
                 tour.start();
               }}
             />
-            <Button variant="primary" icon="plus" data-tour="create" onClick={() => setCreating(true)} disabled={!boot}>
+            <Button variant="primary" icon="plus" data-tour="create" onClick={() => setCreating(Date.now())} disabled={!boot}>
               {t('project.create')}
             </Button>
           </>
@@ -158,7 +194,7 @@ export function ProjectPage() {
                 <DetailSkeleton />
               </div>
             ) : groups.length === 0 ? (
-              <EmptyGroups projectKey={project.key} onCreate={() => setCreating(true)} />
+              <EmptyGroups projectKey={project.key} onCreate={() => setCreating(Date.now())} />
             ) : (
               <LayoutGroup>
                 <div className="split">
@@ -190,7 +226,7 @@ export function ProjectPage() {
       <Footer />
 
       <AnimatePresence>{tour.open && <Tour surface="project" onClose={tour.close} />}</AnimatePresence>
-      <AnimatePresence>{creating && boot && <CreateGroupDialog project={project} prefix={boot.prefix} groups={groups} onClose={() => setCreating(false)} onCreated={onCreated} />}</AnimatePresence>
+      <AnimatePresence>{creating > 0 && boot && <CreateGroupDialog key={creating} project={project} prefix={boot.prefix} groups={groups} onClose={() => setCreating(0)} onCreated={onCreated} />}</AnimatePresence>
     </div>
   );
 }

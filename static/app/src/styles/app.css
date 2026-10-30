@@ -1287,6 +1287,18 @@ ul.member-list[aria-hidden='true'] > .member-row,
   padding: 72px 16px 32px;
   overflow-y: auto;
 }
+/* Closing: let clicks and scrolling through at once, and hide the layer once the
+   exit animation should be over, even if that animation never finishes. */
+.modal-layer.is-leaving {
+  pointer-events: none;
+  overflow: hidden;
+  animation: layer-gone 0s linear 0.4s forwards;
+}
+@keyframes layer-gone {
+  to {
+    visibility: hidden;
+  }
+}
 .modal-scrim {
   position: fixed;
   inset: 0;
@@ -2345,6 +2357,20 @@ ul.member-list[aria-hidden='true'] > .member-row,
   background: var(--accent-bright);
   animation: pulse 1.4s var(--ease-out) infinite;
 }
+.org-form {
+  margin-top: 14px;
+  gap: 18px;
+}
+.org-details {
+  margin-top: 14px;
+  gap: 12px;
+}
+.org-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 .org-status.is-error .org-status-light,
 .org-status.is-missing .org-status-light {
   background: var(--danger);
@@ -3244,6 +3270,10 @@ button.compliance-card:hover:not(:disabled),
   position: fixed;
   inset: 0;
   z-index: 70;
+}
+.tour-layer.is-leaving {
+  pointer-events: none;
+  animation: layer-gone 0s linear 0.4s forwards;
 }
 /* The spotlight dims everything around the target with one oversized shadow. */
 .tour-spot {

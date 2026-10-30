@@ -126,7 +126,7 @@ export function SuggestInput({ label, placeholder, buttonLabel, search, onAdd, a
                     onPointerEnter={() => setActive(i)}
                     onClick={() => commit(it)}
                   >
-                    {i === active && <motion.span layoutId={`${listId}-hl`} className="option-hl" transition={{ type: 'spring', stiffness: 700, damping: 48 }} />}
+                    {i === active && <span className="option-hl" />}
                     <span className="user-option-text">
                       <span>{it.label}</span>
                       {it.sub && <span className="muted small">{it.sub}</span>}

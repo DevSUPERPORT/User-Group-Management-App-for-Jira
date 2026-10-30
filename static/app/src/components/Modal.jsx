@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
+import { motion, useIsPresent } from 'framer-motion';
 import { ease } from '../motion.js';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -12,6 +12,10 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), texta
 export function Modal({ labelledBy, onClose, children, initialFocus, width = 600 }) {
   const dialogRef = useRef(null);
   const restoreRef = useRef(typeof document !== 'undefined' ? document.activeElement : null);
+  // While closing, the layer must never block the page: inside Jira the exit
+  // animation can stall (seen live after "Create group"), which left an invisible
+  // full-page layer that swallowed every click and scroll.
+  const isPresent = useIsPresent();
 
   useEffect(() => {
     const node = dialogRef.current;
@@ -24,6 +28,7 @@ export function Modal({ labelledBy, onClose, children, initialFocus, width = 600
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onKeyDown = (e) => {
+    if (!isPresent) return;
     if (e.key === 'Escape') {
       e.stopPropagation();
       onClose();
@@ -44,13 +49,13 @@ export function Modal({ labelledBy, onClose, children, initialFocus, width = 600
   };
 
   return createPortal(
-    <div className="modal-layer" onKeyDown={onKeyDown}>
+    <div className={`modal-layer ${isPresent ? '' : 'is-leaving'}`} onKeyDown={onKeyDown} aria-hidden={isPresent ? undefined : true}>
       <motion.div
         className="modal-scrim"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1, transition: { duration: 0.28, ease } }}
         exit={{ opacity: 0, transition: { duration: 0.2, ease } }}
-        onClick={onClose}
+        onClick={isPresent ? onClose : undefined}
       />
       <motion.div
         ref={dialogRef}

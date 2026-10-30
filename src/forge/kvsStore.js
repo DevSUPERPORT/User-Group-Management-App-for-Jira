@@ -27,3 +27,11 @@ export const kvsStore = {
     return out;
   },
 };
+
+// Encrypted, installation-scoped secret storage (organization API connection).
+// Secrets are not returned by kvs.query(), so they never end up in a data export.
+export const kvsSecrets = {
+  get: (key) => kvs.getSecret(key),
+  set: (key, value) => kvs.setSecret(key, value),
+  delete: (key) => kvs.deleteSecret(key),
+};

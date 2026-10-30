@@ -109,7 +109,11 @@ export function Select({ id, label, value, options, onChange }) {
                   onPointerEnter={() => setActive(i)}
                   onClick={() => choose(o)}
                 >
-                  {i === active && <motion.span layoutId={`${listId}-hl`} className="option-hl" transition={{ type: 'spring', stiffness: 700, damping: 48 }} />}
+                  {/* Plain element, no layoutId: a shared-layout highlight that unmounts with the
+                      list stayed registered with the surrounding dialog, so the dialog never
+                      finished closing and an invisible layer blocked the page (Create group with
+                      "Start with the members of"). Same in UserPicker and SuggestInput. */}
+                  {i === active && <span className="option-hl" />}
                   <span className="option-label">{o.label}</span>
                   {o.value === value && <Icon name="check" size={16} className="option-check" />}
                 </li>

@@ -156,7 +156,7 @@ Two tabs: **Configuration** and **Audit log (all projects)**.
 
 ### 3.1 First-time setup checklist
 
-1. **Connect the Organization API.** Check **Atlassian organization connection**. If it says *Not set up*, the app cannot create groups or change members yet — follow the [setup steps in the README](README.md#connect-the-organization-api). Then click **Test connection**.
+1. **Connect your organization.** Check **Atlassian organization connection**. If it says *Not set up*, the app cannot create groups or change members yet. Ask an organization admin for an API key (admin.atlassian.com → Settings → API keys), enter your organization ID and the key, and click **Check and save**. The key is stored encrypted for your site only. Later, **Test connection** checks it again; **Replace key** and **Disconnect** change it.
 2. **Choose projects.** Under **Enabled projects**, pick **All projects** or **Selected projects only**.
 3. **Review the block list.** Core admin and product-access groups are **Always blocked**. Add your own under **Additionally blocked** (wildcards like `jira-admins-*` are allowed).
 4. **Mark IdP groups.** Under **Synchronised groups**, add groups your identity provider manages so they show as read-only.

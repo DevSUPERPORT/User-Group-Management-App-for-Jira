@@ -68,14 +68,22 @@ function Chips({ items, render = (x) => x, onRemove, removeLabel, keyOf = (x) =>
   );
 }
 
-const ORG_SETUP = `forge variables set ORG_ID <org-id>
-forge variables set --encrypt ORG_API_KEY <api-key>`;
-
 // Group writes always run through the Atlassian Organization API (Atlassian does
-// not let apps create groups through the Jira REST API). This section shows
-// whether the connection works; the check itself only reads.
-function OrgConnectionSection({ orgConfigured }) {
-  const { t } = useI18n();
+// not let apps create groups through the Jira REST API). Every site connects its
+// own organization here; the key is stored encrypted for this installation only
+// and never comes back to the browser.
+function OrgConnectionSection({ initialStatus }) {
+  const { t, fmt } = useI18n();
+  const notify = useNotify();
+  const [conn, setConn] = useState(initialStatus ?? { configured: false });
+  const [editing, setEditing] = useState(!initialStatus?.configured);
+  const [orgId, setOrgId] = useState(initialStatus?.orgId ?? '');
+  const [apiKey, setApiKey] = useState('');
+  const [directories, setDirectories] = useState(null);
+  const [directoryId, setDirectoryId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -91,15 +99,65 @@ function OrgConnectionSection({ orgConfigured }) {
   };
 
   useEffect(() => {
-    if (orgConfigured) test();
-  }, [orgConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (conn.configured) test();
+  }, [conn.configured, conn.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const status = !orgConfigured ? 'missing' : testing && !result ? 'checking' : result?.ok ? 'ok' : result ? 'error' : 'checking';
+  const closeForm = () => {
+    setEditing(false);
+    setApiKey('');
+    setFormError(null);
+    setDirectories(null);
+    setDirectoryId('');
+  };
+
+  const save = async (e) => {
+    e.preventDefault();
+    setFormError(null);
+    if (!orgId.trim() || !apiKey.trim()) {
+      setFormError(t('config.orgFieldsMissing'));
+      return;
+    }
+    setSaving(true);
+    try {
+      const status = await call('saveOrgConnection', { orgId: orgId.trim(), apiKey: apiKey.trim(), directoryId: directoryId || null });
+      setConn(status);
+      setResult(null);
+      closeForm();
+      notify({ type: 'success', title: t('config.orgSaved') });
+    } catch (err) {
+      if (err.code === 'ORG_DIRECTORY_REQUIRED' && err.details?.directories?.length) {
+        setDirectories(err.details.directories);
+        setDirectoryId(err.details.directories[0].directoryId);
+        setFormError(t('config.orgPickDirectory'));
+      } else {
+        setFormError(errorText(t, err));
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    setSaving(true);
+    try {
+      setConn(await call('removeOrgConnection'));
+      setConfirmRemove(false);
+      setEditing(true);
+      setResult(null);
+      notify({ type: 'info', title: t('config.orgRemoved') });
+    } catch (err) {
+      notify({ type: 'error', title: errorText(t, err) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const status = !conn.configured ? 'missing' : testing && !result ? 'checking' : result?.ok ? 'ok' : result ? 'error' : 'checking';
   const statusText = {
     missing: t('config.orgNotSet'),
     checking: t('config.orgChecking'),
-    ok: t('config.orgOk', { name: result?.directories?.find((d) => d.directoryId === result?.directoryId)?.name ?? result?.directoryId }),
-    error: result?.directories?.length > 1 ? t('config.orgMulti', { count: result.directories.length }) : t('config.orgFail', { message: result?.error?.message ?? '–' }),
+    ok: t('config.orgOk', { name: conn.directoryName ?? conn.directoryId }),
+    error: t('config.orgFail', { message: result?.error?.message ?? t('config.orgDirectoryGone') }),
   }[status];
 
   return (
@@ -111,19 +169,88 @@ function OrgConnectionSection({ orgConfigured }) {
             {statusText}
           </motion.span>
         </AnimatePresence>
-        {orgConfigured && (
+        {conn.configured && (
           <Button size="sm" icon="refresh" onClick={test} loading={testing}>
             {t('config.orgTest')}
           </Button>
         )}
       </div>
-      <AnimatePresence initial={false}>
-        {!orgConfigured && (
-          <motion.div {...collapse}>
-            <div className="subsection">
-              <p className="small">{t('config.orgMissing')}</p>
-              <pre className="code-block">{ORG_SETUP}</pre>
+
+      {conn.configured && !editing && (
+        <div className="subsection org-details">
+          <p className="small muted">
+            {t('config.orgDetails', { orgId: conn.orgId })}
+            {conn.updatedAt ? ` · ${t('config.orgSavedBy', { when: fmt.dateTime(conn.updatedAt), name: conn.updatedBy?.displayName ?? '–' })}` : ''}
+          </p>
+          {confirmRemove ? (
+            <div className="org-actions">
+              <span className="small grow">{t('config.orgRemoveConfirm')}</span>
+              <Button size="sm" onClick={() => setConfirmRemove(false)}>
+                {t('config.orgCancel')}
+              </Button>
+              <Button size="sm" variant="danger" loading={saving} onClick={remove}>
+                {t('config.orgRemove')}
+              </Button>
             </div>
+          ) : (
+            <div className="org-actions">
+              <Button size="sm" onClick={() => setEditing(true)}>
+                {t('config.orgReplace')}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmRemove(true)}>
+                {t('config.orgRemove')}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <AnimatePresence initial={false}>
+        {editing && (
+          <motion.div {...collapse}>
+            <form className="subsection org-form" onSubmit={save} noValidate>
+              <p className="small">{t('config.orgHowTo')}</p>
+              <div className="stack-6">
+                <label htmlFor="org-id" className="label-strong">
+                  {t('config.orgIdLabel')}
+                </label>
+                <input id="org-id" className="input" type="text" autoComplete="off" spellCheck={false} value={orgId} onChange={(e) => setOrgId(e.target.value)} />
+                <span className="small muted">{t('config.orgIdHelp')}</span>
+              </div>
+              <div className="stack-6">
+                <label htmlFor="org-key" className="label-strong">
+                  {t('config.orgKeyLabel')}
+                </label>
+                <input id="org-key" className="input" type="password" autoComplete="new-password" spellCheck={false} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+                <span className="small muted">{t('config.orgKeyHelp')}</span>
+              </div>
+              {directories && (
+                <div className="stack-6">
+                  <label htmlFor="org-dir" className="label-strong">
+                    {t('config.orgDirectoryLabel')}
+                  </label>
+                  <select id="org-dir" className="input" value={directoryId} onChange={(e) => setDirectoryId(e.target.value)}>
+                    {directories.map((d) => (
+                      <option key={d.directoryId} value={d.directoryId}>
+                        {d.name ?? d.directoryId}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {formError && (
+                <div className="notice notice-error" role="alert">
+                  <Icon name="alert" size={18} />
+                  <span>{formError}</span>
+                </div>
+              )}
+              <div className="org-actions">
+                <Button type="submit" variant="primary" loading={saving}>
+                  {t('config.orgSave')}
+                </Button>
+                {conn.configured && <Button onClick={closeForm}>{t('config.orgCancel')}</Button>}
+              </div>
+            </form>
           </motion.div>
         )}
       </AnimatePresence>
@@ -260,7 +387,7 @@ export function AdminConfig({ initial, onSaved }) {
         <p className="muted small">{t('config.namingNote')}</p>
       </Section>
 
-      <OrgConnectionSection orgConfigured={initial.orgApi?.configured} />
+      <OrgConnectionSection initialStatus={initial.orgApi} />
 
       <Section id="sec-roles" title={t('config.roles')} hint={t('config.rolesHint')} delay={0.09}>
         <div className="stack-4">

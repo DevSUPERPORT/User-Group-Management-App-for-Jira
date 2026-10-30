@@ -195,28 +195,65 @@ export function memoryJira(state) {
 
 /**
  * Fake Organization Admin API over the same state as memoryJira.
- * `configured` simulates whether ORG_ID / ORG_API_KEY are set.
+ * `configured` simulates whether the site has stored its organization connection.
+ * connect() accepts any key except "invalid" (rejected like a revoked key) and asks
+ * for a directory when the organization ID ends in "-multi".
  */
 export function memoryOrg(state, { configured = true } = {}) {
   const jira = memoryJira(state);
   const calls = [];
+  let conn = configured ? { orgId: 'org-demo', directoryId: 'dir-1', directoryName: 'SUPERPORT', updatedAt: null, updatedBy: null } : null;
+  const status = () => (conn ? { configured: true, ...conn } : { configured: false });
+  const required = () => {
+    if (!conn) throw new AppError(ErrorCodes.ORG_API_NOT_CONFIGURED, 'The organization connection is not set up');
+  };
   return {
     calls,
-    isConfigured: () => configured,
+    async isConfigured() {
+      return Boolean(conn);
+    },
+    async status() {
+      return status();
+    },
     async check() {
-      return { directories: [{ directoryId: 'dir-1', name: 'SUPERPORT' }], directoryId: 'dir-1' };
+      required();
+      return { directories: [{ directoryId: conn.directoryId, name: conn.directoryName }], directoryId: conn.directoryId };
+    },
+    async connect({ orgId, apiKey, directoryId = null }, updatedBy = null) {
+      calls.push(['connect', orgId]);
+      if (!String(orgId ?? '').trim()) throw new AppError(ErrorCodes.BAD_REQUEST, 'Invalid organization ID', { field: 'orgId' });
+      if (!String(apiKey ?? '').trim()) throw new AppError(ErrorCodes.BAD_REQUEST, 'Invalid API key', { field: 'apiKey' });
+      if (apiKey === 'invalid') throw new AppError(ErrorCodes.ORG_API_UNAUTHORIZED, 'The API key is not valid', { status: 401 });
+      const directories = String(orgId).endsWith('-multi')
+        ? [{ directoryId: 'dir-1', name: 'SUPERPORT' }, { directoryId: 'dir-2', name: 'Partners' }]
+        : [{ directoryId: 'dir-1', name: 'SUPERPORT' }];
+      const picked = directoryId ? directories.find((d) => d.directoryId === directoryId) : directories.length === 1 ? directories[0] : null;
+      if (!picked) throw new AppError(ErrorCodes.ORG_DIRECTORY_REQUIRED, 'Choose a directory', { directories });
+      conn = { orgId: String(orgId).trim(), directoryId: picked.directoryId, directoryName: picked.name, updatedAt: Date.now(), updatedBy };
+      return status();
+    },
+    async disconnect() {
+      conn = null;
+      return status();
     },
     async createGroup(name, description) {
+      required();
       calls.push(['createGroup', name, description]);
       return jira.createGroup(name);
     },
     async addMember(groupId, accountId, groupName) {
+      required();
       calls.push(['addMember', groupId, accountId, groupName]);
       return jira.addMember(groupId, accountId);
     },
     async removeMember(groupId, accountId, groupName) {
+      required();
       calls.push(['removeMember', groupId, accountId, groupName]);
       return jira.removeMember(groupId, accountId);
+    },
+    async groupExists(groupId) {
+      required();
+      return Boolean(state.groups?.[groupId]);
     },
     async getGroupMeta(groupId) {
       const synced = (state.idpGroups ?? []).includes(groupId);

@@ -8,7 +8,7 @@ import { createSeed } from '../../../../src/dev/seed.js';
 // Mirrors the per-surface function lists in src/index.js.
 const ALLOWED = {
   project: ['bootstrap', 'checkName', 'createGroup', 'accessMatrix', 'applyAccessChanges', 'getGroup', 'getMembers', 'updateDescription', 'searchUsers', 'addMembers', 'removeMember', 'removeMembers', 'setExpiry', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'decideRequest', 'reopenRequest', 'completeReview', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
-  admin: ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
+  admin: ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'saveOrgConnection', 'removeOrgConnection', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
   member: ['myGroups', 'requestAccess', 'withdrawRequest'],
   auditor: ['auditorBootstrap', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
 };
@@ -39,7 +39,7 @@ export function createDemoBackend() {
   if (params.get('governance') !== 'off') addGovernanceDemo(seed);
   const service = createService({
     jira: memoryJira(seed.jira),
-    // ?org=off simulates an Organization API without ORG_ID / ORG_API_KEY.
+    // ?org=off simulates a site that has not stored its organization connection yet.
     org: memoryOrg(seed.jira, { configured: params.get('org') !== 'off' }),
     // ?confluence=off simulates a site where the app is not installed in Confluence.
     confluence: memoryConfluence(seed.jira, { available: params.get('confluence') !== 'off' }),

@@ -167,24 +167,22 @@ UI from the Vite dev server on port 3000.
 Atlassian does not let apps create groups or change memberships through the Jira REST API, so all
 group **writes** go through the Atlassian Organization Admin API (reads still use Jira).
 
+Every site connects **its own** organization; there is no app-wide key (a Marketplace app must
+never act with another customer's credentials).
+
 1. An org admin creates an API key at **admin.atlassian.com → Settings → API keys** (unscoped).
-2. Store it as Forge variables:
+2. A Jira admin opens the app's admin page (**Jira settings → Apps → Group Self-Service for Jira**),
+   enters the organization ID (part of the address `admin.atlassian.com/o/<org-id>/…`) and the key,
+   and clicks **Check and save**. The app validates both against Atlassian first; with several user
+   directories it asks which one to use.
+3. The key is kept in Forge secret storage (`kvs.setSecret`): encrypted, scoped to the installation,
+   never returned to the browser and not part of the data export. After moving an installation
+   with export/import, enter the key again on the new one.
+4. **Test connection** re-runs the read-only check; **Replace key** and **Disconnect** change it.
+   Each change is written to the audit log as a configuration change (organization ID only).
 
-   ```bash
-   forge variables set -e production ORG_ID <org-id>
-   forge variables set -e production --encrypt ORG_API_KEY <api-key>
-   ```
-
-   Set `ORG_DIRECTORY_ID` too if the org has more than one user directory. Each Forge environment has
-   its own variables; production on superportdev already has `ORG_ID` and `ORG_API_KEY`.
-3. Deploy and upgrade the installation (the egress to `https://api.atlassian.com` is a major version):
-
-   ```bash
-   npm run deploy
-   forge install --upgrade --site <site> --product jira -e production
-   ```
-
-4. The admin page shows the connection status; **Test connection** re-runs the check.
+The Forge variables `ORG_ID` / `ORG_API_KEY` used by earlier versions are no longer read; remove
+them with `forge variables unset -e production ORG_API_KEY` (and `ORG_ID`, `ORG_DIRECTORY_ID`).
 
 For Confluence usage checks, install the app in Confluence on the same site:
 
