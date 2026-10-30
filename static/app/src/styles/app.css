@@ -314,8 +314,7 @@ a:hover {
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  background: var(--ink);
-  color: var(--on-ink);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;

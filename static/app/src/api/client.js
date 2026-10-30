@@ -24,7 +24,7 @@ function backend() {
         open: (url) => b.router.open(url),
         navigateToModule: (moduleKey, projectKey) => b.router.navigate({ target: 'module', moduleKey, ...(projectKey ? { projectKey } : {}) }),
         rovoEnabled: () => b.rovo.isEnabled(),
-        openRovo: (prompt) => b.rovo.open({ type: 'forge', agentKey: 'gum-agent', agentName: 'Group & User Management', ...(prompt ? { prompt } : {}) }),
+        openRovo: (prompt) => b.rovo.open({ type: 'forge', agentKey: 'gum-agent', agentName: 'Group Self-Service for Jira', ...(prompt ? { prompt } : {}) }),
       }));
     } else {
       backendPromise = import('./demoBackend.js').then((m) => m.createDemoBackend());

@@ -1,4 +1,4 @@
-# Getting started with Group & User Management
+# Getting started with Group Self-Service for Jira
 
 A step-by-step guide for first-time users. Find your role, follow the steps, done.
 
@@ -150,7 +150,7 @@ A project admin decides. You'll see the result under **Your requests**. Changed 
 
 ## Part 3 — Jira admins
 
-**Open the app:** **Jira settings** (⚙️) → **Apps** → **Group & User Management**.
+**Open the app:** **Jira settings** (⚙️) → **Apps** → **Group Self-Service for Jira**.
 
 Two tabs: **Configuration** and **Audit log (all projects)**.
 
@@ -221,7 +221,7 @@ You get a read-only audit log across **all projects**. Filter by **Period**, **P
 
 ## Part 5 — Using the Rovo agent
 
-Open **Rovo** in Jira and choose the **Group & User Management** agent. Ask in plain English or German, for example:
+Open **Rovo** in Jira and choose the **Group Self-Service for Jira** agent. Ask in plain English or German, for example:
 
 - *"Which groups exist in project ABC and who is in them?"*
 - *"Where is atlassian-ABC-reviewers used?"*

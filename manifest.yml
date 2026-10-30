@@ -4,7 +4,7 @@ modules:
   jira:projectSettingsPage:
     - key: gum-project-settings
       resource: main
-      icon: resource:icons;superport.svg
+      icon: resource:icons;group-self-service.svg
       resolver:
         function: resolver
       title: Groups
@@ -13,7 +13,7 @@ modules:
   jira:projectPage:
     - key: gum-my-groups
       resource: main
-      icon: resource:icons;superport.svg
+      icon: resource:icons;group-self-service.svg
       resolver:
         function: resolver
       title: My groups
@@ -22,7 +22,7 @@ modules:
   jira:globalPage:
     - key: gum-audit
       resource: main
-      icon: resource:icons;superport.svg
+      icon: resource:icons;group-self-service.svg
       resolver:
         function: resolver
       title: Group audit log
@@ -31,21 +31,21 @@ modules:
   jira:adminPage:
     - key: gum-admin-page
       resource: main
-      icon: resource:icons;superport.svg
+      icon: resource:icons;group-self-service.svg
       resolver:
         function: resolver
-      title: Group & User Management
+      title: Group Self-Service for Jira
       layout: basic
 
   # Rovo: AI-assisted group and user management. Every action runs through the
   # same permission checks as the app; changes are audited "via Rovo".
   rovo:agent:
     - key: gum-agent
-      name: Group & User Management
+      name: Group Self-Service for Jira
       description: Manages project groups and their members safely – who is in which group, where a group is used, access requests, reviews and the audit log.
-      icon: resource:icons;superport.svg
+      icon: resource:icons;group-self-service.svg
       prompt: |
-        You are the SUPERPORT "Group & User Management" assistant for Jira project admins.
+        You are the SUPERPORT "Group Self-Service for Jira" assistant for Jira project admins.
         You help them see and change the groups of their Jira projects (named atlassian-<PROJECTKEY>-<name>).
 
         Rules you always follow:
@@ -516,7 +516,7 @@ resources:
     path: static/app/build
     tunnel:
       port: 3000
-  # Black/white SUPERPORT mark shown next to the app's entries in Jira's menus.
+  # App icon (orange, people in a circle) shown next to the app's entries in Jira's menus.
   - key: icons
     path: static/icons
 permissions:

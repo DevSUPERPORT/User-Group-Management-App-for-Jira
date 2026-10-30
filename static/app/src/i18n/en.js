@@ -1,5 +1,5 @@
 export default {
-  appName: 'Group & User Management',
+  appName: 'Group Self-Service for Jira',
   madeBy: 'An app by SUPERPORT',
   'tabs.groups': 'Groups',
   'tabs.audit': 'Audit log',
@@ -542,7 +542,7 @@ export default {
   'tour.finish': "Got it",
   'tour.close': "Close tutorial",
 
-  'tour.project.welcome.title': "Welcome to Group & User Management",
+  'tour.project.welcome.title': "Welcome to Group Self-Service for Jira",
   'tour.project.welcome.body': "Create your project's groups and decide who is in them yourself, with no ticket for the site admin. This tour shows you where everything is in about a minute.",
   'tour.project.welcome.p1': "Every change is written to the audit log: who, what and when.",
   'tour.project.welcome.p2': "Every change can be reversed with “Undo” in the message that appears afterwards.",
@@ -566,7 +566,7 @@ export default {
   'tour.project.done.title': "You're ready",
   'tour.project.done.body': "Start by creating a group or adding people to an existing one.",
   'tour.project.done.p1': "Open this tour again at any time with “Tutorial”.",
-  'tour.project.done.p2': "Prefer to ask? The Rovo agent “Group & User Management” does the same, and confirms before every change.",
+  'tour.project.done.p2': "Prefer to ask? The Rovo agent “Group Self-Service for Jira” does the same, and confirms before every change.",
 
   'tour.member.welcome.title': "Your groups in this project",
   'tour.member.welcome.body': "This page shows which groups of this project you are in, and lets you ask for access to others. Only you see this view.",
@@ -582,7 +582,7 @@ export default {
   'tour.member.done.title': "That's it",
   'tour.member.done.body': "Open this tour again at any time with “Tutorial”. To change a group, ask a project admin of this project.",
 
-  'tour.admin.welcome.title': "Set up Group & User Management",
+  'tour.admin.welcome.title': "Set up Group Self-Service for Jira",
   'tour.admin.welcome.body': "Project admins create and manage their own groups. You set the rules for every project here. Check these once:",
   'tour.admin.welcome.p1': "The Organization API connection, without which nothing can be changed.",
   'tour.admin.welcome.p2': "Which projects use the app, and which groups are off limits.",
@@ -647,7 +647,7 @@ export default {
   'transfer.importing': "Importing… {done} of {total}",
   'transfer.imported': "Import complete: {records} records and {entries} audit entries imported ({skipped} were already there)",
   'transfer.failed': "Stopped after {done} of {total}. Nothing is lost: start the import again and entries already imported are skipped.",
-  'transfer.invalidFile': "This file is not an export of Group & User Management.",
+  'transfer.invalidFile': "This file is not an export of Group Self-Service for Jira.",
   'transfer.countMismatch': "This file is incomplete or was changed: the number of entries does not match.",
   'error.reason.OTHER_SITE': "This export comes from a different Atlassian site. Group and account IDs only apply to their own site, so it cannot be imported here.",
   'error.reason.INVALID_ENTRY': "The file contains an invalid entry: {message}",
@@ -676,7 +676,7 @@ export default {
   'project.askRovo': "Ask Rovo",
   'project.askRovoHint': "Manage groups in a chat with the Rovo agent",
   'project.rovoPrompt': "Which groups exist in project {key} and who is in them?",
-  'project.rovoUnavailable': "Open Rovo with “Ask Rovo” in Jira's top bar and choose the agent “Group & User Management”.",
+  'project.rovoUnavailable': "Open Rovo with “Ask Rovo” in Jira's top bar and choose the agent “Group Self-Service for Jira”.",
   'matrix.search': "Search",
   'matrix.noResults': "Nothing found",
   'matrix.columns': "Groups {shown}/{total}",

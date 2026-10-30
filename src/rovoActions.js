@@ -1,4 +1,4 @@
-// Rovo actions for the "Group & User Management" agent (logic only; the Forge
+// Rovo actions for the "Group Self-Service for Jira" agent (logic only; the Forge
 // wiring is in rovo.js so the actions can be tested against the in-memory backend).
 //
 // Safety model:

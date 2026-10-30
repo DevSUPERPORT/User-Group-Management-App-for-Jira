@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="static/icons/superport.svg" alt="SUPERPORT" width="72" height="72" />
+<img src="static/icons/group-self-service.svg" alt="Group Self-Service for Jira" width="72" height="72" />
 
-# Group & User Management for Jira
+# Group Self-Service for Jira
 
 **Self-service Atlassian groups for project admins — safe, audited, and reversible.**
 
@@ -26,7 +26,7 @@ A SUPERPORT [Atlassian Forge](https://developer.atlassian.com/platform/forge/) a
 ## Why
 
 In most Jira sites only site admins can create groups or change who is in them, so project admins
-end up filing tickets for every new teammate. **Group & User Management** hands that job to the
+end up filing tickets for every new teammate. **Group Self-Service for Jira** hands that job to the
 project admins — inside a fixed naming convention, with guardrails, an append-only audit log, and
 one-click undo for every change. Jira admins keep global control.
 
@@ -56,8 +56,8 @@ one-click undo for every change. Jira admins keep global control.
 | **Project settings → Groups** | Project admins | Groups, members, people matrix, where-used, requests, audit log |
 | **Project page → My groups** | Project members | Own groups (read-only) and access requests |
 | **Apps → Group audit log** | Auditors & Jira admins | Read-only global audit log with CSV export |
-| **Admin → Group & User Management** | Jira admins | Configuration, block list, IdP groups, compliance overview, Org API status |
-| **Rovo → Group & User Management** | Project admins | Conversational group management |
+| **Admin → Group Self-Service for Jira** | Jira admins | Configuration, block list, IdP groups, compliance overview, Org API status |
+| **Rovo → Group Self-Service for Jira** | Project admins | Conversational group management |
 
 Background jobs: daily audit retention, hourly membership expiry, hourly Confluence restriction
 index, optional daily cleanup of deactivated accounts, and SQL migrations on install/upgrade.

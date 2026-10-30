@@ -3,9 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../i18n/index.jsx';
 import { ease } from '../motion.js';
 
-const MARK =
-  'm1041.1,852.78c20.92-47.16,31.4-97.7,31.4-151.66v-2.12c0-53.92-10.31-104.46-30.88-151.66-20.57-47.16-49.15-88.13-85.66-122.91-36.55-34.78-79.47-62.1-128.8-81.98-49.33-19.83-102.68-29.8-160.19-29.8s-111.04,10.13-160.71,30.36c-49.67,20.22-92.76,47.85-129.32,83.02-36.55,35.12-65.26,76.26-86.18,123.43-20.96,47.21-31.4,97.75-31.4,151.66v2.17c0,53.92,10.26,104.46,30.88,151.66,20.57,47.16,49.11,88.17,85.66,122.91,16.23,15.44,34.19,28.85,52.93,41.36,65.3-52.18,147.01-84.68,237.1-84.68s170.71,32.06,235.81,83.62c18.85-12.67,36.88-26.27,53.14-41.89,36.55-35.12,65.26-76.26,86.23-123.47Zm-370.99,9.56c-88.62,0-160.46-71.84-160.46-160.46s71.84-160.45,160.46-160.45,160.45,71.84,160.45,160.45-71.84,160.46-160.45,160.46Z';
-
+// The app icon: people in a circle on the orange tile (same as static/icons/group-self-service.svg).
 export function Logo() {
   return (
     <motion.div
@@ -14,9 +12,18 @@ export function Logo() {
       animate={{ scale: 1, opacity: 1, rotate: 0 }}
       transition={{ type: 'spring', stiffness: 380, damping: 22, delay: 0.05 }}
     >
-      <motion.svg width="28" height="28" viewBox="0 0 1331.86 1331.86" aria-hidden="true" initial={{ y: 6, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5, ease, delay: 0.18 }}>
-        <path fill="currentColor" d={MARK} />
-      </motion.svg>
+      <svg width="44" height="44" viewBox="0 0 1920 1920" aria-hidden="true">
+        <rect width="1920" height="1920" rx="420" fill="#e34a04" />
+        <motion.g initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5, ease, delay: 0.18 }}>
+          <g fill="none" stroke="#fff" strokeWidth="83" strokeLinecap="round">
+            <circle cx="960" cy="960" r="675" />
+            <circle cx="600" cy="840" r="105" />
+            <circle cx="1320" cy="840" r="105" />
+            <path d="M660 1350a300 300 0 0 1 600 0M690 1080A260 260 0 0 0 390 1238M1230 1080A260 260 0 0 1 1530 1238" />
+          </g>
+          <circle cx="960" cy="780" r="165" fill="#fff" />
+        </motion.g>
+      </svg>
     </motion.div>
   );
 }

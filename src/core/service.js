@@ -1,4 +1,4 @@
-// Business logic of the Group & User Management app.
+// Business logic of the Group Self-Service for Jira app.
 //
 // Everything platform-specific is injected:
 //   jira  – Jira REST access performed by the app (see src/forge/jiraClient.js)

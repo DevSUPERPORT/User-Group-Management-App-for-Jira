@@ -2,7 +2,7 @@
   "name": "superport-group-user-management",
   "version": "1.0.0",
   "private": true,
-  "description": "SUPERPORT Group & User Management – Forge app for Jira Cloud (self-service groups for project admins)",
+  "description": "SUPERPORT Group Self-Service for Jira – Forge app for Jira Cloud (self-service groups for project admins)",
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
