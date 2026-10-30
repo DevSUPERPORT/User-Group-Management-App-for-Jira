@@ -22,7 +22,7 @@ A step-by-step guide for first-time users. Find your role, follow the steps, don
 
 ## Part 1 — Project admins
 
-**Open the app:** your project → **Project settings** → **Groups**.
+**Open the app:** your project → **Project settings** → **Apps** → **Group Self-Service for Jira**.
 
 You'll see four tabs: **Groups**, **People**, **Requests** and **Audit log**.
 

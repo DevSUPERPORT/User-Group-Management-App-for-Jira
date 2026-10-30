@@ -1,5 +1,5 @@
 modules:
-  # UC-01 .. UC-06: "Groups" entry in the project settings, where project admins
+  # UC-01 .. UC-06: "Group Self-Service for Jira" entry in the project settings, where project admins
   # already manage people and permissions.
   jira:projectSettingsPage:
     - key: gum-project-settings
@@ -7,7 +7,7 @@ modules:
       icon: resource:icons;group-self-service.svg
       resolver:
         function: resolver
-      title: Groups
+      title: Group Self-Service for Jira
       layout: basic
   # "My groups" for project members: own groups (read-only) and access requests.
   jira:projectPage:

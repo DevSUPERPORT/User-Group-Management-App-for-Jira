@@ -617,7 +617,7 @@ export default {
   'tour.admin.audit.title': "Audit log (all projects)",
   'tour.admin.audit.body': "Every change in every project. Filter it and export as CSV for audits.",
   'tour.admin.done.title': "All set",
-  'tour.admin.done.body': "Open this tour again at any time with “Tutorial”. Project admins find the app under Project settings → Groups.",
+  'tour.admin.done.body': "Open this tour again at any time with “Tutorial”. Project admins find the app under Project settings → Apps → Group Self-Service for Jira.",
 
   'tour.auditor.welcome.title': "Group audit log",
   'tour.auditor.welcome.body': "A read-only record of every group change in every project: who changed what, for whom and when. Entries cannot be edited or deleted.",

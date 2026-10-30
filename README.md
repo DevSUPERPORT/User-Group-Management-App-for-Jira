@@ -53,7 +53,7 @@ one-click undo for every change. Jira admins keep global control.
 
 | Module | Who | What |
 | --- | --- | --- |
-| **Project settings → Groups** | Project admins | Groups, members, people matrix, where-used, requests, audit log |
+| **Project settings → Apps → Group Self-Service for Jira** | Project admins | Groups, members, people matrix, where-used, requests, audit log |
 | **Project page → My groups** | Project members | Own groups (read-only) and access requests |
 | **Apps → Group audit log** | Auditors & Jira admins | Read-only global audit log with CSV export |
 | **Admin → Group Self-Service for Jira** | Jira admins | Configuration, block list, IdP groups, compliance overview, Org API status |
