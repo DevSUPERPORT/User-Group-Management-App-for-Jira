@@ -170,7 +170,9 @@ group **writes** go through the Atlassian Organization Admin API (reads still us
 Every site connects **its own** organization; there is no app-wide key (a Marketplace app must
 never act with another customer's credentials).
 
-1. An org admin creates an API key at **admin.atlassian.com → Settings → API keys** (unscoped).
+1. An org admin creates an organization API key at **admin.atlassian.com → Settings → API keys**:
+   scoped to user and group management where scopes are offered, with a short expiry. Never a
+   personal API token or password.
 2. A Jira admin opens the app's admin page (**Jira settings → Apps → Group Self-Service for Jira**),
    enters the organization ID (part of the address `admin.atlassian.com/o/<org-id>/…`) and the key,
    and clicks **Check and save**. The app validates both against Atlassian first; with several user

@@ -208,7 +208,7 @@ export default {
   'config.orgIdLabel': "Organisations-ID",
   'config.orgIdHelp': "In der Atlassian Administration steht die ID in der Adresse: admin.atlassian.com/o/<Organisations-ID>/…",
   'config.orgKeyLabel': "API-Schlüssel",
-  'config.orgKeyHelp': "Nimm einen Schlüssel, der Gruppen und Benutzer verwalten darf.",
+  'config.orgKeyHelp': "Gib dem Schlüssel nur die Rechte, die er braucht: Bietet deine Organisation API-Schlüssel mit Bereichen an, beschränke ihn auf die Verwaltung von Benutzern und Gruppen. Wähle eine kurze Laufzeit und ersetze den Schlüssel hier, bevor er abläuft. Das ist ein Organisationsschlüssel, nie ein persönliches API-Token oder Passwort.",
   'config.orgDirectoryLabel': "Benutzerverzeichnis",
   'config.orgPickDirectory': "Die Organisation hat mehrere Benutzerverzeichnisse. Wähle das aus, dessen Gruppen diese Site nutzt, und speichere erneut.",
   'config.orgFieldsMissing': "Gib die Organisations-ID und den API-Schlüssel ein.",

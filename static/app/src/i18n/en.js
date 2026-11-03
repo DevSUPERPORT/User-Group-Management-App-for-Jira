@@ -208,7 +208,7 @@ export default {
   'config.orgIdLabel': "Organization ID",
   'config.orgIdHelp': "In Atlassian Administration the ID is part of the address: admin.atlassian.com/o/<organization ID>/…",
   'config.orgKeyLabel': "API key",
-  'config.orgKeyHelp': "Use a key that is allowed to manage groups and users.",
+  'config.orgKeyHelp': "Give the key only the permissions it needs: if your organization offers API keys with scopes, limit it to managing users and groups. Choose a short expiry and replace the key here before it runs out. This is an organization key, never a personal API token or password.",
   'config.orgDirectoryLabel': "User directory",
   'config.orgPickDirectory': "The organization has several user directories. Choose the one whose groups this site uses, then save again.",
   'config.orgFieldsMissing': "Enter the organization ID and the API key.",
