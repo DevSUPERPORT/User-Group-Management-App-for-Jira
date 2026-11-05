@@ -11,7 +11,7 @@
     "build:ui": "npm --prefix static/app run build",
     "build:demo": "npm --prefix static/app run build:demo",
     "validate": "node scripts/validate-manifest.cjs",
-    "deploy": "npm run build:ui && forge deploy -e production",
+    "deploy": "node scripts/deploy.mjs",
     "deploy:dev": "npm run build:ui && forge deploy -e development"
   },
   "dependencies": {
