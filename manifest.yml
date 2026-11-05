@@ -499,19 +499,29 @@ modules:
       handler: index.rovoCopyMembers
     - key: rovo-undo-last-change
       handler: index.rovoUndoLastChange
+  # filter.appIsLicensed: Forge skips these runs on sites without an active Marketplace licence (Atlassian's
+  # "reduced functionality when unlicensed"); the install/upgrade trigger below always runs.
   scheduledTrigger:
     - key: audit-retention
       function: retention
       interval: day
+      filter:
+        appIsLicensed: true
     - key: membership-expiry
       function: expiry
       interval: hour
+      filter:
+        appIsLicensed: true
     - key: confluence-restriction-index
       function: confluence-index
       interval: hour
+      filter:
+        appIsLicensed: true
     - key: deactivated-cleanup
       function: automation
       interval: day
+      filter:
+        appIsLicensed: true
   trigger:
     - key: sql-migrations
       function: lifecycle

@@ -54,17 +54,26 @@ export function onMaintenance(listener) {
   return () => maintenanceListeners.delete(listener);
 }
 
+// A refusal with code LICENSE_INACTIVE (the site's Marketplace licence ended while the page was open) switches the
+// app to the "licence not active" banner.
+const licenseListeners = new Set();
+export function onLicenseInactive(listener) {
+  licenseListeners.add(listener);
+  return () => licenseListeners.delete(listener);
+}
+
 export async function call(name, payload = {}) {
   const b = await backend();
   const res = await b.invoke(name, payload);
   if (res && res.error) {
     if (res.error.code === 'UNAVAILABLE' && res.error.details?.mode) maintenanceListeners.forEach((l) => l(res.error.details));
+    if (res.error.code === 'LICENSE_INACTIVE') licenseListeners.forEach((l) => l());
     throw new ApiError(res.error);
   }
   return res?.data;
 }
 
-// { mode: 'off' | 'readonly' | 'on', statusUrl }, asked before any page loads.
+// { mode: 'off' | 'readonly' | 'on', statusUrl, licensed }, asked before any page loads.
 export function availability() {
   return call('availability');
 }

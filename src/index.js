@@ -13,7 +13,7 @@
  */
 
 import ResolverExport from '@forge/resolver';
-import { createService } from './core/service.js';
+import { createService, isLicenseInactive } from './core/service.js';
 import { AppError, ErrorCodes, toErrorPayload } from './core/errors.js';
 import { maintenanceMode, requireAvailable, STATUS_PAGE_URL } from './core/maintenance.js';
 import { jiraClient } from './forge/jiraClient.js';
@@ -136,7 +136,9 @@ function define(name, allowed) {
 // Signed-in callers only; it reports the mode and never changes it.
 resolver.define('availability', async (req) => {
   if (!req.context?.accountId) return toErrorPayload(new AppError(ErrorCodes.FORBIDDEN, 'Not signed in'));
-  return { data: { mode: maintenanceMode(), statusUrl: STATUS_PAGE_URL } };
+  // licensed: false only when Forge reports an inactive Marketplace licence (no context.license = not a paid
+  // production install, e.g. development). The UI then shows a banner up front instead of failing on save.
+  return { data: { mode: maintenanceMode(), statusUrl: STATUS_PAGE_URL, licensed: !isLicenseInactive(req.context?.license) } };
 });
 
 PROJECT_FUNCTIONS.forEach((n) => define(n, ['project']));

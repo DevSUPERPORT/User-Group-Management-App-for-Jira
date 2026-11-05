@@ -66,6 +66,24 @@ export function Maintenance({ statusUrl }) {
   );
 }
 
+/**
+ * Banner above every page when the site's Marketplace licence is not active: the server refuses every change
+ * (LICENSE_INACTIVE), so say so before anyone fills in a form. Jira admins get the hint where to fix it.
+ */
+export function LicenseBanner({ admin }) {
+  const { t } = useI18n();
+  return (
+    <motion.div className="maint-banner" role="status" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease }}>
+      <div className="container maint-banner-inner">
+        <Icon name="shield" size={16} />
+        <span className="maint-banner-text">
+          {t('license.inactive')} {t(admin ? 'license.inactiveAdmin' : 'license.inactiveUser')}
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
 /** Slim banner above every page while changes are paused (APP_MAINTENANCE=readonly). */
 export function ReadonlyBanner({ statusUrl }) {
   const { t } = useI18n();

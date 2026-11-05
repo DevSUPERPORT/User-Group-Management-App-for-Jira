@@ -22,6 +22,15 @@
  */
 
 import { AppError, ErrorCodes } from './errors.js';
+
+/**
+ * True when Forge reports that the site has no active Marketplace licence. license.active is the current
+ * property and isActive the deprecated one; either being false counts. No license object (development, staging,
+ * free or unlisted installs) is not "inactive".
+ */
+export function isLicenseInactive(license) {
+  return Boolean(license) && (license.active === false || license.isActive === false);
+}
 import { CORE_BLOCKED_GROUPS, PRODUCT_ACCESS_PATTERNS, blockingPattern, isFixedEntry, matchesPattern } from './blocklist.js';
 import { fullGroupName, parseGroupName, prefixFor, validateNamePart } from './naming.js';
 import { auditRowsToCsv, toCsv } from './csv.js';
@@ -159,7 +168,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
 
   function assertLicensed(ctx) {
     // Forge only sets context.license for paid Marketplace apps in production.
-    if (ctx.license && ctx.license.isActive === false) {
+    if (isLicenseInactive(ctx.license)) {
       throw new AppError(ErrorCodes.LICENSE_INACTIVE, 'The app licence is not active');
     }
   }

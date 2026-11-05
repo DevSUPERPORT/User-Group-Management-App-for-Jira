@@ -175,6 +175,8 @@ test('licence: writes are rejected when the Marketplace licence is inactive', as
   const unlicensed = ctx({ license: { isActive: false } });
   assert.equal(await codeOf(service.createGroup(unlicensed, { namePart: 'neu' })), 'LICENSE_INACTIVE');
   assert.equal(await codeOf(service.addMembers(unlicensed, { groupId: 'g-admins', accountIds: ['u-anna-beispiel'] })), 'LICENSE_INACTIVE');
+  // license.active is the current Forge property (isActive is deprecated)
+  assert.equal(await codeOf(service.createGroup(ctx({ license: { active: false } }), { namePart: 'neu' })), 'LICENSE_INACTIVE');
 });
 
 test('UC-04: project admins only see their project; Jira admins see everything; filters; CSV', async () => {

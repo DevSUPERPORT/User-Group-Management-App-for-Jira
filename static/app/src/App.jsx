@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from 'react';
 import { MotionConfig } from 'framer-motion';
-import { DEMO, availability, enableTheme, getContext, inForge, onMaintenance } from './api/client.js';
+import { DEMO, availability, enableTheme, getContext, inForge, onLicenseInactive, onMaintenance } from './api/client.js';
 import { I18nProvider, resolveLanguage } from './i18n/index.jsx';
 import { ToastProvider } from './components/Toaster.jsx';
 import { ProjectPage } from './pages/ProjectPage.jsx';
@@ -21,7 +21,7 @@ import { AdminPage } from './pages/AdminPage.jsx';
 import { MyGroupsPage } from './pages/MyGroupsPage.jsx';
 import { AuditorPage } from './pages/AuditorPage.jsx';
 import { DemoBar } from './pages/StateScreens.jsx';
-import { Maintenance, ReadonlyBanner, STATUS_PAGE_URL } from './pages/Maintenance.jsx';
+import { LicenseBanner, Maintenance, ReadonlyBanner, STATUS_PAGE_URL } from './pages/Maintenance.jsx';
 
 const SURFACES = { 'gum-admin-page': 'admin', 'gum-my-groups': 'member', 'gum-audit': 'auditor', 'gum-project-settings': 'project' };
 const PAGES = { admin: AdminPage, member: MyGroupsPage, auditor: AuditorPage, project: ProjectPage };
@@ -32,7 +32,11 @@ export function App() {
   // server refuses a call because the app was paused in the meantime.
   const [maintenance, setMaintenance] = useState({ mode: 'off', statusUrl: STATUS_PAGE_URL });
 
+  // false when the site's Marketplace licence is not active: everything stays viewable, changes are refused.
+  const [licensed, setLicensed] = useState(true);
+
   useEffect(() => onMaintenance((m) => setMaintenance((prev) => ({ mode: m.mode === 'on' || prev.mode === 'on' ? 'on' : 'readonly', statusUrl: m.statusUrl || prev.statusUrl }))), []);
+  useEffect(() => onLicenseInactive(() => setLicensed(false)), []);
 
   useEffect(() => {
     Promise.all([getContext(), enableTheme().catch(() => {}), availability().catch(() => null)]).then(([context, , av]) => {
@@ -40,6 +44,7 @@ export function App() {
       const lang = resolveLanguage(context.locale);
       document.documentElement.lang = lang;
       if (av?.mode) setMaintenance({ mode: av.mode, statusUrl: av.statusUrl || STATUS_PAGE_URL });
+      if (av?.licensed === false) setLicensed(false);
       setCtx({ surface, lang });
     });
   }, []);
@@ -55,6 +60,7 @@ export function App() {
           ) : (
             <>
               {maintenance.mode === 'readonly' && <ReadonlyBanner statusUrl={maintenance.statusUrl} />}
+              {!licensed && <LicenseBanner admin={ctx.surface === 'admin'} />}
               <Page />
             </>
           )}

@@ -231,7 +231,7 @@ test('APP_MAINTENANCE=on: nothing a caller sends can switch it off or get around
 test('APP_MAINTENANCE=on: the UI is told, Rovo answers "unavailable" and the scheduled jobs do nothing', async () => {
   set('on');
   reset();
-  assert.deepEqual(await call('availability'), { data: { mode: 'on', statusUrl: 'https://superapps.statuspage.io' } });
+  assert.deepEqual(await call('availability'), { data: { mode: 'on', statusUrl: 'https://superapps.statuspage.io', licensed: true } });
   for (const name of ROVO) {
     reset();
     const res = await index[name]({ projectKey: 'PROJ', groupName: 'reviewer', people: 'Lena Koch', confirm: true }, rovoCaller);
@@ -258,6 +258,16 @@ test('availability: only for signed-in callers, and it never changes the mode', 
   assert.equal((await call('availability', { mode: 'off' }, 'member')).data.mode, 'readonly');
   set('banana');
   assert.equal((await call('availability', {}, 'admin')).data.mode, 'on');
+});
+
+test('availability: reports an inactive Marketplace licence so the UI can say so up front', async () => {
+  reset();
+  const withLicense = (license) => handler({ call: { functionKey: 'availability', payload: {} }, context: { ...contextFor('project'), license } });
+  assert.equal((await withLicense(undefined)).data.licensed, true);
+  assert.equal((await withLicense({ isActive: true })).data.licensed, true);
+  assert.equal((await withLicense({ isActive: false })).data.licensed, false);
+  assert.equal((await withLicense({ active: false })).data.licensed, false);
+  assert.equal((await withLicense({ active: true, isActive: true })).data.licensed, true);
 });
 
 // ---------------------------------------------------------------- readonly

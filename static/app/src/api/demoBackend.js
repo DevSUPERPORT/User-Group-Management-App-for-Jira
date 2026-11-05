@@ -77,15 +77,17 @@ export function createDemoBackend() {
       details: { reason: mode === 'on' ? 'APP_UNAVAILABLE' : 'CHANGES_PAUSED', mode, statusUrl: STATUS_URL },
     },
   });
+  // ?license=inactive simulates a site whose Marketplace licence has ended (as Forge's context.license reports it).
+  const license = params.get('license') === 'inactive' ? { isActive: false } : null;
   const latency = (name) => (fast ? 0 : name === 'checkName' || name === 'searchUsers' ? 180 + Math.random() * 220 : 280 + Math.random() * 420);
 
   return {
     async invoke(name, payload) {
       await ready;
       await new Promise((r) => setTimeout(r, latency(name)));
-      if (name === 'availability') return { data: { mode: maint, statusUrl: STATUS_URL } };
+      if (name === 'availability') return { data: { mode: maint, statusUrl: STATUS_URL, licensed: license === null || license.isActive } };
       if (maint === 'on' || (maint === 'readonly' && !READS.has(name))) return refusal(maint);
-      const ctx = { accountId: 'u-me', projectId: withProject ? '10001' : null, surface, license: null };
+      const ctx = { accountId: 'u-me', projectId: withProject ? '10001' : null, surface, license };
       if (!ALLOWED[surface].includes(name)) return { error: { code: 'FORBIDDEN', message: 'Not available here' } };
       try {
         return { data: structuredClone(await service[name](ctx, payload ?? {})) };
