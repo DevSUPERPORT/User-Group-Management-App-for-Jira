@@ -1,3 +1,15 @@
+/**
+ * Shared full-page states: the error and no-access screen with retry, the empty state of a project without groups,
+ * the group detail skeleton and the click-dummy's demo bar.
+ *
+ * @file        static/app/src/pages/StateScreens.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { motion } from 'framer-motion';
 import { useI18n } from '../i18n/index.jsx';
 import { Icon } from '../components/Icon.jsx';

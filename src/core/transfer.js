@@ -1,10 +1,19 @@
-import { AppError, ErrorCodes } from './errors.js';
+/**
+ * Moves everything the app has stored from one installation to another on the
+ * same site (e.g. development → production): Forge KVS records and the full
+ * audit log. Export and import run in pages so no single call gets too large;
+ * importing the same file twice is safe (KVS keys are overwritten with the same
+ * value, audit entries that already exist are skipped).
+ *
+ * @file        src/core/transfer.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
-// Moves everything the app has stored from one installation to another on the
-// same site (e.g. development → production): Forge KVS records and the full
-// audit log. Export and import run in pages so no single call gets too large;
-// importing the same file twice is safe (KVS keys are overwritten with the same
-// value, audit entries that already exist are skipped).
+import { AppError, ErrorCodes } from './errors.js';
 
 export const EXPORT_FORMAT = 'superport-gum-export';
 export const EXPORT_VERSION = 1;

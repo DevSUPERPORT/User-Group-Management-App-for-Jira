@@ -1,3 +1,15 @@
+/**
+ * Main page for project admins in the project settings: tabs for groups, people, access requests and the project's
+ * audit log, with create group, member view, Rovo and the tour.
+ *
+ * @file        static/app/src/pages/ProjectPage.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { call, openModule, openRovo } from '../api/client.js';

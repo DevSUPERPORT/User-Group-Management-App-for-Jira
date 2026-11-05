@@ -1,3 +1,15 @@
+/**
+ * Text input with asynchronous suggestions, used on the admin page to add groups, projects or wildcard patterns to
+ * the configuration lists.
+ *
+ * @file        static/app/src/features/admin/SuggestInput.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button, Spinner } from '../../components/primitives.jsx';

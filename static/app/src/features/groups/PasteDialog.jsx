@@ -1,3 +1,15 @@
+/**
+ * Bulk add (UC-03): paste emails or names, review how each line resolved, choose between ambiguous matches, then
+ * add everyone with an optional end date.
+ *
+ * @file        static/app/src/features/groups/PasteDialog.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

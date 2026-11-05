@@ -1,3 +1,15 @@
+/**
+ * English UI texts, keyed by area (project, groups, members, people, audit, config, tour, errors and more). Every
+ * key must also exist in de.js with the same placeholders; test/i18n.test.js checks both.
+ *
+ * @file        static/app/src/i18n/en.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 export default {
   appName: 'Group Self-Service for Jira',
   madeBy: 'An app by SUPERPORT',
@@ -722,4 +734,12 @@ export default {
   'error.reason.USED_ELSEWHERE': "This group also grants access in other projects ({projects}). Only a Jira admin can add people to it.",
   'config.scopeGuard': "Project admins can only add people to groups that grant access within their own project (recommended)",
   'config.scopeGuardHint': "A project group that also appears in another project’s permission scheme or project roles is then locked for additions by project admins. Jira admins can still change it; removing people always works.",
+  // SUPERPORT kill switch (APP_MAINTENANCE on the server)
+  'maint.title': "Group Self-Service for Jira is temporarily unavailable",
+  'maint.body': "We've paused Group Self-Service for Jira for maintenance to keep your data safe. Nothing you've saved is lost, and we'll be back as soon as possible. You can follow the progress on our status page.",
+  'maint.status': "View status page",
+  'maint.readonly': "Changes are paused for maintenance to keep your data safe. You can still view everything; editing will be back as soon as possible.",
+  'error.UNAVAILABLE': "Group Self-Service for Jira is temporarily unavailable. We've paused it for maintenance to keep your data safe and will be back as soon as possible.",
+  'error.reason.APP_UNAVAILABLE': "Group Self-Service for Jira is temporarily unavailable. We've paused it for maintenance to keep your data safe and will be back as soon as possible.",
+  'error.reason.CHANGES_PAUSED': "Changes are paused for maintenance to keep your data safe. Nothing was changed; editing will be back as soon as possible.",
 };

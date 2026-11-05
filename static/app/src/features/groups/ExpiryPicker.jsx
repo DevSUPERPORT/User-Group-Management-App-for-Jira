@@ -1,3 +1,15 @@
+/**
+ * End-of-access picker for time-limited memberships (none, 7/30/90 days or a date), plus helpers that convert
+ * between picker values and end-of-day timestamps.
+ *
+ * @file        static/app/src/features/groups/ExpiryPicker.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useId } from 'react';
 import { useI18n } from '../../i18n/index.jsx';
 

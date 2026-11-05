@@ -1,6 +1,15 @@
-// In-memory implementations of the jira/store/audit adapters.
-// Used by the unit tests and by the UI click-dummy (static/app, `npm run dev`).
-// Never imported by src/index.js, so it is not part of the Forge bundle.
+/**
+ * In-memory implementations of the jira/store/audit adapters.
+ * Used by the unit tests and by the UI click-dummy (static/app, `npm run dev`).
+ * Never imported by src/index.js, so it is not part of the Forge bundle.
+ *
+ * @file        src/dev/memory.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
 import { AppError, ErrorCodes } from '../core/errors.js';
 

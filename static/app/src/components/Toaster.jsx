@@ -1,3 +1,15 @@
+/**
+ * Notification layer (ToastProvider, useNotify). Inside Jira it raises native Jira flags with Undo/Retry actions;
+ * in the click-dummy it renders its own animated toasts.
+ *
+ * @file        static/app/src/components/Toaster.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Icon } from './Icon.jsx';

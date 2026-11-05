@@ -1,3 +1,15 @@
+/**
+ * German UI texts (addressing the user with "du"), the counterpart of en.js with the same keys and placeholders;
+ * test/i18n.test.js checks both.
+ *
+ * @file        static/app/src/i18n/de.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 export default {
   appName: 'Group Self-Service for Jira',
   madeBy: 'Eine App von SUPERPORT',
@@ -722,4 +734,12 @@ export default {
   'error.reason.USED_ELSEWHERE': "Diese Gruppe gibt auch in anderen Projekten Zugriff ({projects}). Nur ein Jira-Admin kann Personen hinzufügen.",
   'config.scopeGuard': "Projekt-Admins können Personen nur zu Gruppen hinzufügen, die ausschließlich im eigenen Projekt Zugriff geben (empfohlen)",
   'config.scopeGuardHint': "Taucht eine Projektgruppe auch im Berechtigungsschema oder in den Projektrollen eines anderen Projekts auf, können Projekt-Admins dort niemanden mehr hinzufügen. Jira-Admins können sie weiter ändern; Entfernen geht immer.",
+  // SUPERPORT-Notschalter (APP_MAINTENANCE auf dem Server)
+  'maint.title': "Group Self-Service for Jira ist vorübergehend nicht verfügbar",
+  'maint.body': "Wir haben Group Self-Service for Jira zu deinem Schutz für Wartungsarbeiten pausiert. Deine gespeicherten Daten bleiben erhalten, und wir sind so schnell wie möglich wieder da. Den aktuellen Stand findest du auf unserer Statusseite.",
+  'maint.status': "Statusseite öffnen",
+  'maint.readonly': "Änderungen sind zu deinem Schutz wegen Wartungsarbeiten pausiert. Du kannst weiterhin alles ansehen; Bearbeiten ist so schnell wie möglich wieder möglich.",
+  'error.UNAVAILABLE': "Group Self-Service for Jira ist vorübergehend nicht verfügbar. Wir haben die App zu deinem Schutz für Wartungsarbeiten pausiert und sind so schnell wie möglich wieder da.",
+  'error.reason.APP_UNAVAILABLE': "Group Self-Service for Jira ist vorübergehend nicht verfügbar. Wir haben die App zu deinem Schutz für Wartungsarbeiten pausiert und sind so schnell wie möglich wieder da.",
+  'error.reason.CHANGES_PAUSED': "Änderungen sind zu deinem Schutz wegen Wartungsarbeiten pausiert. Es wurde nichts geändert; Bearbeiten ist so schnell wie möglich wieder möglich.",
 };

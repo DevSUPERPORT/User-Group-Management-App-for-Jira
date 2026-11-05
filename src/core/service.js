@@ -1,16 +1,25 @@
-// Business logic of the Group Self-Service for Jira app.
-//
-// Everything platform-specific is injected:
-//   jira  – Jira REST access performed by the app (see src/forge/jiraClient.js)
-//   store – key/value storage (Forge KVS)
-//   audit – append-only audit log (Forge SQL)
-// The same service runs in Forge, in the unit tests and in the local UI click-dummy.
-//
-// Security model: project admins are natively not allowed to create groups or change
-// members. The app performs those actions on their behalf, so every call re-checks
-// the caller's permissions and that the group belongs to the caller's project.
-// The project and account ids always come from the trusted Forge context, never
-// from the payload.
+/**
+ * Business logic of the Group Self-Service for Jira app.
+ *
+ * Everything platform-specific is injected:
+ *   jira  – Jira REST access performed by the app (see src/forge/jiraClient.js)
+ *   store – key/value storage (Forge KVS)
+ *   audit – append-only audit log (Forge SQL)
+ * The same service runs in Forge, in the unit tests and in the local UI click-dummy.
+ *
+ * Security model: project admins are natively not allowed to create groups or change
+ * members. The app performs those actions on their behalf, so every call re-checks
+ * the caller's permissions and that the group belongs to the caller's project.
+ * The project and account ids always come from the trusted Forge context, never
+ * from the payload.
+ *
+ * @file        src/core/service.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
 import { AppError, ErrorCodes } from './errors.js';
 import { CORE_BLOCKED_GROUPS, PRODUCT_ACCESS_PATTERNS, blockingPattern, isFixedEntry, matchesPattern } from './blocklist.js';

@@ -1,3 +1,15 @@
+/**
+ * Tests for the people view and batch changes: the access matrix, changes across groups with partial failure and
+ * undo, creating a group from another group's members, and the scope guard.
+ *
+ * @file        test/access.test.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';

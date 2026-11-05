@@ -1,3 +1,15 @@
+/**
+ * UC-04 audit log view shared by project admins, Jira admins and auditors: filters, pagination, tags that explain
+ * each entry and CSV export. Entries are read-only.
+ *
+ * @file        static/app/src/features/audit/AuditLog.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

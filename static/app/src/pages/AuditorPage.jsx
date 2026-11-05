@@ -1,3 +1,15 @@
+/**
+ * Global "Group audit log" page for auditors and Jira admins: read and export the full audit log of all projects,
+ * nothing else.
+ *
+ * @file        static/app/src/pages/AuditorPage.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 import { call } from '../api/client.js';
 import { useI18n } from '../i18n/index.jsx';

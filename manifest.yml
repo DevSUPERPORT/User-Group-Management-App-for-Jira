@@ -1,3 +1,13 @@
+# Forge manifest of Group Self-Service for Jira: the four Jira pages, the Rovo agent with its 16 actions, the
+# functions, scheduled and install triggers, Forge SQL, resources, scopes, egress and licensing.
+#
+# @file        manifest.yml
+# @app         Group Self-Service for Jira
+# @author      George Papasotiriou
+# @company     SUPERPORT
+# @created     2026-10-26
+# @updated     2026-11-05
+
 modules:
   # UC-01 .. UC-06: "Group Self-Service for Jira" entry in the project settings, where project admins
   # already manage people and permissions.

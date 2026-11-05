@@ -1,3 +1,15 @@
+/**
+ * React hook that loads a group's cached usage and describes what a person loses when removed from it, for the
+ * removal and review dialogs.
+ *
+ * @file        static/app/src/features/groups/useImpact.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useState } from 'react';
 import { call } from '../../api/client.js';
 import { useI18n } from '../../i18n/index.jsx';

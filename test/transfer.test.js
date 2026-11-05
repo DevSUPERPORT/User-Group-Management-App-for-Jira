@@ -1,3 +1,15 @@
+/**
+ * Tests for data export and import between installations: lossless round trip, idempotent re-import,
+ * Jira-admin-only access, and rejection of files from another site or with broken entries.
+ *
+ * @file        test/transfer.test.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';

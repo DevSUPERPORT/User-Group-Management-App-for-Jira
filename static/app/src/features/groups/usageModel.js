@@ -1,5 +1,15 @@
-// UC-06: the "where is this group used" checks, in display order, with how each
-// finding is described. Shared by the usage panel, the removal impact and reviews.
+/**
+ * UC-06: the "where is this group used" checks, in display order, with how each
+ * finding is described. Shared by the usage panel, the removal impact and reviews.
+ *
+ * @file        static/app/src/features/groups/usageModel.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 export const USAGE_CHECKS = [
   { key: 'permissionSchemes', product: 'jira', icon: 'shield' },
   { key: 'workflows', product: 'jira', icon: 'arrowRight' },

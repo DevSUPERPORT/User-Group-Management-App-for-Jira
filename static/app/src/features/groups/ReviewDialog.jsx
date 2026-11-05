@@ -1,3 +1,15 @@
+/**
+ * Access review dialog for removing several members at once: who is removed, what access they lose, a note for the
+ * audit log and an explicit confirmation; it can also record the periodic review.
+ *
+ * @file        static/app/src/features/groups/ReviewDialog.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { call } from '../../api/client.js';

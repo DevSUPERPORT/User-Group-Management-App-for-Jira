@@ -1,3 +1,15 @@
+/**
+ * Core service tests: naming, block list, CSV escaping, bootstrap and key changes, permissions, group creation,
+ * members, IdP and foreign groups, licence, audit log, configuration and groups deleted outside the app.
+ *
+ * @file        test/service.test.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService, AuditActions } from '../src/core/service.js';

@@ -1,3 +1,15 @@
+/**
+ * Inline editor for a group's description (the app's own text for the group), with save, undo from the
+ * notification and retry on failure.
+ *
+ * @file        static/app/src/features/groups/DescriptionEditor.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useState } from 'react';
 
 // The editor mounts only after the view has animated out, so it focuses itself

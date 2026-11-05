@@ -1,3 +1,15 @@
+/**
+ * People view ("who is in which group"): every person of the project's groups in one table. Clicks stage changes
+ * that are reviewed and applied as one batch, with end date, note and undo.
+ *
+ * @file        static/app/src/features/people/PeoplePanel.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

@@ -1,6 +1,16 @@
-// First-run tour per surface. Texts live in i18n under tour.<surface>.<id>.title/.body
-// and, for steps with points, .p1 … .pN. Raise a surface's version when its tour
-// changes enough that its users should see it again.
+/**
+ * First-run tour per surface. Texts live in i18n under tour.<surface>.<id>.title/.body
+ * and, for steps with points, .p1 … .pN. Raise a surface's version when its tour
+ * changes enough that its users should see it again.
+ *
+ * @file        static/app/src/features/tutorial/steps.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 export const TUTORIAL_VERSIONS = { project: 2, member: 1, admin: 3, auditor: 1 };
 
 export const TOURS = {

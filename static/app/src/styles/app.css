@@ -1,3 +1,15 @@
+/**
+ * All layout and component styles of the Custom UI (header, lists, members, people table, dialogs, toasts, tour,
+ * state screens, kill-switch banner), built on the variables from tokens.css for light and dark mode.
+ *
+ * @file        static/app/src/styles/app.css
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 /* ------------------------------------------------------------------ base */
 *,
 *::before,
@@ -926,6 +938,71 @@ html[data-color-mode='dark'] .avatar[data-tone='5'] {
   border-radius: var(--radius);
   background: var(--soft);
   font-size: 13px;
+}
+
+/* read-only banner while SUPERPORT has paused changes (kill switch, see pages/Maintenance.jsx) */
+.maint-banner {
+  background: var(--accent-tint);
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px;
+}
+.maint-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.maint-banner-inner > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.maint-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+/* full "temporarily unavailable" page */
+.state-card.maint-card {
+  align-items: center;
+  text-align: center;
+}
+.maint-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: stretch;
+  justify-content: center;
+}
+.maint-brand .logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+.maint-brand .logo svg {
+  width: 28px;
+  height: 28px;
+}
+.maint-mark {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin: 8px 0 4px;
+}
+.maint-mark > svg {
+  position: relative;
+  display: block;
+}
+.maint-mark-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent-ring);
+}
+@media (max-width: 640px) {
+  .maint-banner-inner {
+    flex-wrap: wrap;
+  }
 }
 
 /* ------------------------------------------------------------------ group list */

@@ -1,3 +1,15 @@
+/**
+ * Page chrome shared by all surfaces: the app logo, the header with the pointer-reactive dot grid, title and
+ * actions, the animated tabs and the "An app by SUPERPORT" footer.
+ *
+ * @file        static/app/src/components/Shell.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../i18n/index.jsx';

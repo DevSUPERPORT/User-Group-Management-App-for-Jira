@@ -1,9 +1,18 @@
-// Passphrase encryption for data exports, done entirely in the browser with the
-// Web Crypto API: the passphrase and the plain data never leave the admin's
-// browser. AES-256-GCM encrypts and authenticates the data; the key comes from
-// the passphrase via PBKDF2-SHA-256 with a random salt. The file header (format,
-// algorithm, salt, IV, iterations) is bound as additional authenticated data, so
-// changing any byte of the file makes decryption fail.
+/**
+ * Passphrase encryption for data exports, done entirely in the browser with the
+ * Web Crypto API: the passphrase and the plain data never leave the admin's
+ * browser. AES-256-GCM encrypts and authenticates the data; the key comes from
+ * the passphrase via PBKDF2-SHA-256 with a random salt. The file header (format,
+ * algorithm, salt, IV, iterations) is bound as additional authenticated data, so
+ * changing any byte of the file makes decryption fail.
+ *
+ * @file        static/app/src/features/admin/exportCrypto.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
 export const ENVELOPE_FORMAT = 'superport-gum-export-encrypted';
 export const ENVELOPE_VERSION = 1;

@@ -1,3 +1,15 @@
+/**
+ * UC-01 dialog to create a group under the fixed atlassian-<KEY>- prefix, with a live name check, description,
+ * "add me" and optionally the members of an existing group to start with.
+ *
+ * @file        static/app/src/features/groups/CreateGroupDialog.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useAnimationControls } from 'framer-motion';
 import { call } from '../../api/client.js';

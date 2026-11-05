@@ -1,5 +1,17 @@
-// Single entry point for backend calls. Inside Jira the Forge bridge invokes the
-// resolver; outside Forge (click-dummy) the same service runs in the browser.
+/**
+ * Single entry point for backend calls. Inside Jira the Forge bridge invokes the
+ * resolver; outside Forge (click-dummy) the same service runs in the browser.
+ *
+ * Also wraps the Forge bridge helpers (context, theme, flags, router, Rovo) and passes kill-switch refusals (code
+ * UNAVAILABLE) to the app so it can show the maintenance screens.
+ *
+ * @file        static/app/src/api/client.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
 export const DEMO = import.meta.env.DEV || import.meta.env.VITE_DEMO === 'true';
 export const inForge = typeof window !== 'undefined' && Boolean(window.__bridge);
@@ -33,11 +45,28 @@ function backend() {
   return backendPromise;
 }
 
+// SUPERPORT's kill switch is decided on the server (APP_MAINTENANCE); the UI only follows what the server says.
+// A refusal with code UNAVAILABLE carries the current mode, so the app can switch to the "temporarily
+// unavailable" page or show the read-only banner even when the mode changed while the page was open.
+const maintenanceListeners = new Set();
+export function onMaintenance(listener) {
+  maintenanceListeners.add(listener);
+  return () => maintenanceListeners.delete(listener);
+}
+
 export async function call(name, payload = {}) {
   const b = await backend();
   const res = await b.invoke(name, payload);
-  if (res && res.error) throw new ApiError(res.error);
+  if (res && res.error) {
+    if (res.error.code === 'UNAVAILABLE' && res.error.details?.mode) maintenanceListeners.forEach((l) => l(res.error.details));
+    throw new ApiError(res.error);
+  }
   return res?.data;
+}
+
+// { mode: 'off' | 'readonly' | 'on', statusUrl }, asked before any page loads.
+export function availability() {
+  return call('availability');
 }
 
 export async function getContext() {

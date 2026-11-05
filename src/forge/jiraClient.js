@@ -1,13 +1,25 @@
+/**
+ * All Jira calls run asApp(): project admins are natively not allowed to manage
+ * groups, so the app acts on their behalf after the service layer has checked
+ * their permissions. NOTE: confirming that the app user may create groups and
+ * change members on every customer site is the "permissions spike" from the
+ * concept document - see README.md.
+ *
+ * Jira REST adapter for the service's jira port: projects, permission checks, users, groups and paged members,
+ * plus the where-used checks from usage.js.
+ *
+ * @file        src/forge/jiraClient.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { route } from '@forge/api';
 import { ErrorCodes } from '../core/errors.js';
 import { call, mapLimit } from './http.js';
 import { jiraUsage } from './usage.js';
-
-// All Jira calls run asApp(): project admins are natively not allowed to manage
-// groups, so the app acts on their behalf after the service layer has checked
-// their permissions. NOTE: confirming that the app user may create groups and
-// change members on every customer site is the "permissions spike" from the
-// concept document - see README.md.
 
 function mapUser(u) {
   return {

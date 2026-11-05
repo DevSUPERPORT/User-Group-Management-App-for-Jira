@@ -1,3 +1,14 @@
+/**
+ * Tests for the first-run tour state: unseen at first, remembered per user and per surface, invalid input refused.
+ *
+ * @file        test/tutorial.test.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';

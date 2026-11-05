@@ -1,3 +1,15 @@
+/**
+ * Service tests for the where-used checks, the Confluence restriction index, access requests, periodic reviews,
+ * the deactivated-account automation, the compliance overview, config sanitising and the Rovo helpers.
+ *
+ * @file        test/governance.test.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';

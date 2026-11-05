@@ -1,3 +1,15 @@
+/**
+ * Accessible custom select (button plus popup listbox) with keyboard navigation and an animated popover, used
+ * where a native select does not fit the design.
+ *
+ * @file        static/app/src/components/Select.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Icon } from './Icon.jsx';

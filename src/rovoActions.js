@@ -1,15 +1,26 @@
-// Rovo actions for the "Group Self-Service for Jira" agent (logic only; the Forge
-// wiring is in rovo.js so the actions can be tested against the in-memory backend).
-//
-// Safety model:
-// - The caller is the Atlassian user talking to Rovo; their account id comes from
-//   the Forge invocation context, never from the chat.
-// - Every action runs through the same service as the app: project admin rights,
-//   group ownership, block list, IdP read-only, licence and the Organization API
-//   are all enforced there.
-// - Changes are marked "via Rovo" in the audit log (see rovo.js) and are kept small
-//   per call (max. 10 additions / 5 removals) so a misunderstanding cannot do much harm.
+/**
+ * Rovo actions for the "Group Self-Service for Jira" agent (logic only; the Forge
+ * wiring is in rovo.js so the actions can be tested against the in-memory backend).
+ *
+ * Safety model:
+ * - The caller is the Atlassian user talking to Rovo; their account id comes from
+ *   the Forge invocation context, never from the chat.
+ * - Every action runs through the same service as the app: project admin rights,
+ *   group ownership, block list, IdP read-only, licence and the Organization API
+ *   are all enforced there.
+ * - Changes are marked "via Rovo" in the audit log (see rovo.js) and are kept small
+ *   per call (max. 10 additions / 5 removals) so a misunderstanding cannot do much harm.
+ *
+ * @file        src/rovoActions.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { AppError, ErrorCodes } from './core/errors.js';
+import { requireAvailable } from './core/maintenance.js';
 
 export const MAX_ADD = 10;
 export const MAX_REMOVE = 5;
@@ -48,10 +59,14 @@ export function accountIdOf(payload, context) {
 }
 
 export function createRovoActions(service, { now = () => Date.now() } = {}) {
-  // Wraps an action: resolves the caller and project, turns errors into a clear
-  // answer Rovo can relay ("nothing was changed") instead of a stack trace.
-  const action = (fn) => async (payload, context) => {
+  // Wraps an action: passes the kill switch first (APP_MAINTENANCE, see
+  // core/maintenance.js), resolves the caller and project, and turns errors into a
+  // clear answer Rovo can relay ("nothing was changed") instead of a stack trace.
+  // kind defaults to 'write', so a new action is refused in read-only mode unless
+  // it is marked 'read' on purpose.
+  const action = (fn, kind = 'write') => async (payload, context) => {
     try {
+      requireAvailable(kind);
       const accountId = accountIdOf(payload, context);
       if (!accountId) return { ok: false, error: 'Could not identify the calling user; nothing was done.', nothingChanged: true };
       const project = payload?.projectKey ? await service.resolveProjectKey(payload.projectKey) : null;
@@ -112,7 +127,7 @@ export function createRovoActions(service, { now = () => Date.now() } = {}) {
         createdUnderPreviousKey: g.legacyKey,
       })),
     };
-  });
+  }, 'read');
 
   const groupDetails = action(async ({ payload, ctx }) => {
     const g = await groupOf(ctx, payload.groupName);
@@ -127,7 +142,7 @@ export function createRovoActions(service, { now = () => Date.now() } = {}) {
       members: members.members.map((m) => ({ name: m.displayName, email: m.email, active: m.active, until: isoDate(m.expiresAt), addedBy: m.addedBy, addedOn: isoDate(m.addedAt) })),
       recentChanges: (detail.recentChanges ?? []).map((e) => ({ when: new Date(e.createdAt).toISOString(), action: e.action, person: e.targetName, by: e.actorName })),
     };
-  });
+  }, 'read');
 
   const whereUsed = action(async ({ payload, ctx }) => {
     const g = await groupOf(ctx, payload.groupName);
@@ -138,7 +153,7 @@ export function createRovoActions(service, { now = () => Date.now() } = {}) {
       summary[key] = value.status === 'ok' ? value.items : { status: value.status, note: value.error?.message ?? value.reason ?? null };
     }
     return { group: g.name, usage: summary };
-  });
+  }, 'read');
 
   const auditLog = action(async ({ payload, ctx }) => {
     const days = Math.min(Math.max(Number(payload.days) || 30, 1), 365);
@@ -148,7 +163,7 @@ export function createRovoActions(service, { now = () => Date.now() } = {}) {
       total: res.total,
       entries: res.entries.map((e) => ({ when: new Date(e.createdAt).toISOString(), action: e.action, group: e.groupName, person: e.targetName, by: e.actorName, details: e.details })),
     };
-  });
+  }, 'read');
 
   const complianceCheck = action(async ({ ctx, project }) => {
     const boot = await service.bootstrap(ctx);
@@ -169,7 +184,7 @@ export function createRovoActions(service, { now = () => Date.now() } = {}) {
       expiringWithin14Days: expiring,
       deactivatedAccounts: deactivated,
     };
-  });
+  }, 'read');
 
   // ---------------------------------------------------------------- CREATE / UPDATE / DELETE
 
@@ -260,7 +275,7 @@ export function createRovoActions(service, { now = () => Date.now() } = {}) {
       memberOf: m.groups.filter((g) => p.memberships[g.groupId]).map((g) => ({ group: g.name, until: isoDate(p.memberships[g.groupId].expiresAt) })),
       notMemberOf: m.groups.filter((g) => !p.memberships[g.groupId]).map((g) => g.name),
     };
-  });
+  }, 'read');
 
   // "Give them the same groups as …": adds only, never removes.
   const copyAccess = action(async ({ payload, ctx }) => {

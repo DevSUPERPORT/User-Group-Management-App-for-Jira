@@ -1,7 +1,19 @@
+/**
+ * Shared request helper for Jira and Confluence calls made as the app.
+ *
+ * Maps HTTP failures to AppError codes and offers mapLimit (bounded parallelism) and check (one where-used check
+ * that reports ok/error instead of throwing).
+ *
+ * @file        src/forge/http.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { asApp } from '@forge/api';
 import { AppError, ErrorCodes } from '../core/errors.js';
-
-// Shared request helper for Jira and Confluence calls made as the app.
 
 function safeJson(text) {
   try {

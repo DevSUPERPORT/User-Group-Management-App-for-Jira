@@ -1,11 +1,20 @@
-// Incremental index of Confluence page restrictions by group (UC-06).
-// Confluence has no "which pages does this group restrict" lookup, so a scheduled
-// trigger scans pages in small batches and keeps, per group, the pages that
-// restrict it. A full pass ends with pruning of pages that were not seen again
-// (deleted pages, removed restrictions).
-//
-// Storage: cfidx:state, cfidx:g:<groupId> = { [pageId]: { title, spaceId, ops, scan } },
-//          cfidx:p:<pageId> = [groupId]
+/**
+ * Incremental index of Confluence page restrictions by group (UC-06).
+ * Confluence has no "which pages does this group restrict" lookup, so a scheduled
+ * trigger scans pages in small batches and keeps, per group, the pages that
+ * restrict it. A full pass ends with pruning of pages that were not seen again
+ * (deleted pages, removed restrictions).
+ *
+ * Storage: cfidx:state, cfidx:g:<groupId> = { [pageId]: { title, spaceId, ops, scan } },
+ *          cfidx:p:<pageId> = [groupId]
+ *
+ * @file        src/core/confluenceIndex.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
 const MAX_PAGES_PER_GROUP = 2000;
 

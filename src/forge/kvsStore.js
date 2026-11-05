@@ -1,3 +1,15 @@
+/**
+ * Forge KVS adapter for the service's store port: get/set/delete, prefix listing and paged reads for the data
+ * export. kvsSecrets is the encrypted secret storage that holds each site's organization connection.
+ *
+ * @file        src/forge/kvsStore.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { kvs, WhereConditions } from '@forge/kvs';
 
 // Group-to-project assignment, project key history and app configuration.

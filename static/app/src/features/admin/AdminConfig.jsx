@@ -1,3 +1,16 @@
+/**
+ * Configuration tab of the Jira admin page: organization connection, project scope, block list, IdP read-only
+ * groups, auditor groups, member view, time limits, requests, reviews, automation and scope guard, saved together
+ * and undoable.
+ *
+ * @file        static/app/src/features/admin/AdminConfig.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call, openModule } from '../../api/client.js';

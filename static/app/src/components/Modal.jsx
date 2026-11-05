@@ -1,3 +1,15 @@
+/**
+ * Shared modal dialog rendered in a portal, with backdrop, focus trap, Escape to close and focus restore; every
+ * dialog of the app is built on it.
+ *
+ * @file        static/app/src/components/Modal.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, useIsPresent } from 'framer-motion';

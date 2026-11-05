@@ -1,7 +1,16 @@
-import { sql, migrationRunner } from '@forge/sql';
+/**
+ * Append-only audit log in Forge SQL. The app exposes no update or delete
+ * operation; the only deletion is the retention purge run by the scheduled trigger.
+ *
+ * @file        src/forge/sqlAudit.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
-// Append-only audit log in Forge SQL. The app exposes no update or delete
-// operation; the only deletion is the retention purge run by the scheduled trigger.
+import { sql, migrationRunner } from '@forge/sql';
 
 migrationRunner
   .enqueue(

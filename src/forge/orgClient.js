@@ -1,16 +1,25 @@
+/**
+ * Group writes: Atlassian Organization Admin API (v2). The Jira REST API rejects
+ * group creation by the app user.
+ *
+ * Every installation brings its own connection: a Jira admin of the site enters
+ * the organization ID and an organization API key on the app's admin page. Both
+ * are kept in Forge secret storage (encrypted, scoped to the installation, never
+ * returned to the browser and not part of the data export). There is deliberately
+ * no app-wide fallback: a Marketplace app must never act with another customer's key.
+ *
+ * Docs: https://developer.atlassian.com/cloud/admin/organization/rest/api-group-groups/
+ *
+ * @file        src/forge/orgClient.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { fetch } from '@forge/api';
 import { AppError, ErrorCodes } from '../core/errors.js';
-
-// Group writes: Atlassian Organization Admin API (v2). The Jira REST API rejects
-// group creation by the app user.
-//
-// Every installation brings its own connection: a Jira admin of the site enters
-// the organization ID and an organization API key on the app's admin page. Both
-// are kept in Forge secret storage (encrypted, scoped to the installation, never
-// returned to the browser and not part of the data export). There is deliberately
-// no app-wide fallback: a Marketplace app must never act with another customer's key.
-//
-// Docs: https://developer.atlassian.com/cloud/admin/organization/rest/api-group-groups/
 
 const BASE = 'https://api.atlassian.com/admin/v2';
 const SECRET_KEY = 'org-connection';

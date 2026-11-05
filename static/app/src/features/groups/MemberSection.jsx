@@ -1,3 +1,15 @@
+/**
+ * Members of one group (UC-02/UC-03): paged list with search, adding people with an optional end date, removing,
+ * access review and end date changes, each with undo.
+ *
+ * @file        static/app/src/features/groups/MemberSection.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

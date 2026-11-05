@@ -1,8 +1,17 @@
+/**
+ * Confluence access for UC-06 (needs the app installed in Confluence on the same
+ * site). Groups are organization-wide, so Confluence uses the same group ids.
+ *
+ * @file        src/forge/confluenceClient.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { route } from '@forge/api';
 import { callConfluence, mapLimit } from './http.js';
-
-// Confluence access for UC-06 (needs the app installed in Confluence on the same
-// site). Groups are organization-wide, so Confluence uses the same group ids.
 
 const SPACE_CAP = 200;
 

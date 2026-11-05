@@ -1,4 +1,17 @@
-// One motion vocabulary for the whole app: quick, springy, never bouncy.
+/**
+ * One motion vocabulary for the whole app: quick, springy, never bouncy.
+ *
+ * Shared easing curves, springs and variants (fade, list stagger, collapse, shake) used by the framer-motion
+ * animations.
+ *
+ * @file        static/app/src/motion.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 export const ease = [0.22, 1, 0.36, 1];
 
 export const spring = { type: 'spring', stiffness: 520, damping: 42, mass: 0.9 };

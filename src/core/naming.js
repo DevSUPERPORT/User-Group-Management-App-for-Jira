@@ -1,6 +1,15 @@
-// Naming convention: atlassian-<PROJECTKEY>-<name>
-// The prefix is fixed and derived from the project's current key; the project
-// admin only chooses <name>.
+/**
+ * Naming convention: atlassian-<PROJECTKEY>-<name>
+ * The prefix is fixed and derived from the project's current key; the project
+ * admin only chooses <name>.
+ *
+ * @file        src/core/naming.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
 export const GROUP_PREFIX = 'atlassian-';
 // Short enough to stay readable in Jira pickers and the people table.

@@ -1,3 +1,15 @@
+/**
+ * Jira admin page (jira:adminPage): loads adminBootstrap and shows the configuration tab (settings, compliance,
+ * organization connection, data transfer) and the audit log of all projects.
+ *
+ * @file        static/app/src/pages/AdminPage.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../api/client.js';

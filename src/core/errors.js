@@ -1,4 +1,17 @@
-// Errors carry a stable code; the frontend maps codes to localized messages.
+/**
+ * Errors carry a stable code; the frontend maps codes to localized messages.
+ *
+ * Defines AppError, the list of ErrorCodes and toErrorPayload, which turns anything thrown in a resolver into the
+ * { error: { code, message, details } } shape the UI expects.
+ *
+ * @file        src/core/errors.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 export class AppError extends Error {
   constructor(code, message, details) {
     super(message ?? code);
@@ -26,6 +39,8 @@ export const ErrorCodes = {
   ORG_DIRECTORY_REQUIRED: 'ORG_DIRECTORY_REQUIRED',
   BAD_REQUEST: 'BAD_REQUEST',
   GROUP_USED_ELSEWHERE: 'GROUP_USED_ELSEWHERE',
+  // SUPERPORT kill switch (APP_MAINTENANCE, see maintenance.js): app down or changes paused.
+  UNAVAILABLE: 'UNAVAILABLE',
 };
 
 /** Wraps a resolver so every error reaches the UI as { error: { code, message, details } }. */

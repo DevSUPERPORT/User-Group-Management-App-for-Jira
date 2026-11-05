@@ -1,3 +1,15 @@
+/**
+ * Tests for the browser-side export encryption: AES-256-GCM round trip, fresh salt and IV, wrong passphrase and
+ * tampering, and refusal of weak passphrases or weakened settings.
+ *
+ * @file        test/exportCrypto.test.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ENVELOPE_FORMAT, ITERATIONS, decryptExport, encryptExport, readEnvelope } from '../static/app/src/features/admin/exportCrypto.js';

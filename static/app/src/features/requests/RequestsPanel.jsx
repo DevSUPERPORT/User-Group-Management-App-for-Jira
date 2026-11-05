@@ -1,3 +1,15 @@
+/**
+ * Project admin view of access requests from "My groups": approve (adds the person with the requested end date) or
+ * deny with a note, every decision undoable. Also exports splitGroupName.
+ *
+ * @file        static/app/src/features/requests/RequestsPanel.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

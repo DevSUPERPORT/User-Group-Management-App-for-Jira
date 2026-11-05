@@ -1,3 +1,15 @@
+/**
+ * Detail view of one group on the project page: name, description, creation info, review status, where-used panel,
+ * members and the latest change with a link to the audit log.
+ *
+ * @file        static/app/src/features/groups/GroupDetail.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

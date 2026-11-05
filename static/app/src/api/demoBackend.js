@@ -1,5 +1,18 @@
-// Click-dummy backend: the real service layer with in-memory Jira, storage and
-// audit log, plus realistic latency so loading states can be seen.
+/**
+ * Click-dummy backend: the real service layer with in-memory Jira, storage and
+ * audit log, plus realistic latency so loading states can be seen.
+ *
+ * Mirrors the per-surface resolver lists and the READS list of src/index.js; ?maintenance=readonly|on previews the
+ * kill-switch screens locally.
+ *
+ * @file        static/app/src/api/demoBackend.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { createService } from '../../../../src/core/service.js';
 import { toErrorPayload } from '../../../../src/core/errors.js';
 import { memoryAudit, memoryConfluence, memoryJira, memoryOrg, memoryStore } from '../../../../src/dev/memory.js';
@@ -14,6 +27,9 @@ const ALLOWED = {
 };
 // First-run tutorial: available on every surface.
 for (const list of Object.values(ALLOWED)) list.push('tutorialState', 'markTutorialSeen');
+// Mirrors READS in src/index.js: the resolvers that keep working while changes are paused.
+const READS = new Set(['bootstrap', 'checkName', 'accessMatrix', 'getGroup', 'getMembers', 'searchUsers', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'queryAudit', 'auditFilterOptions', 'exportAudit', 'tutorialState', 'myGroups', 'auditorBootstrap', 'adminBootstrap', 'exportData', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup']);
+const STATUS_URL = 'https://superapps.statuspage.io';
 const MODULES = { project: 'gum-project-settings', admin: 'gum-admin-page', member: 'gum-my-groups', auditor: 'gum-audit' };
 
 // Demo-only governance data: a periodic review (one group overdue), open and
@@ -51,12 +67,24 @@ export function createDemoBackend() {
   const surface = MODULES[params.get('view')] ? params.get('view') : 'project';
   const withProject = surface === 'project' || surface === 'member';
   const fast = params.has('fast');
+  // ?maintenance=readonly|on previews the kill-switch screens. Click-dummy only: in Jira the mode comes from the
+  // server's environment and nothing in the browser can set it.
+  const maint = ['readonly', 'on'].includes(params.get('maintenance')) ? params.get('maintenance') : 'off';
+  const refusal = (mode) => ({
+    error: {
+      code: 'UNAVAILABLE',
+      message: mode === 'on' ? `Group Self-Service for Jira is temporarily unavailable. Status page: ${STATUS_URL}` : `Changes are paused for maintenance to keep your data safe. Status page: ${STATUS_URL}`,
+      details: { reason: mode === 'on' ? 'APP_UNAVAILABLE' : 'CHANGES_PAUSED', mode, statusUrl: STATUS_URL },
+    },
+  });
   const latency = (name) => (fast ? 0 : name === 'checkName' || name === 'searchUsers' ? 180 + Math.random() * 220 : 280 + Math.random() * 420);
 
   return {
     async invoke(name, payload) {
       await ready;
       await new Promise((r) => setTimeout(r, latency(name)));
+      if (name === 'availability') return { data: { mode: maint, statusUrl: STATUS_URL } };
+      if (maint === 'on' || (maint === 'readonly' && !READS.has(name))) return refusal(maint);
       const ctx = { accountId: 'u-me', projectId: withProject ? '10001' : null, surface, license: null };
       if (!ALLOWED[surface].includes(name)) return { error: { code: 'FORBIDDEN', message: 'Not available here' } };
       try {

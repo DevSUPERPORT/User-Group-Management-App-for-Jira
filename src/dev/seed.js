@@ -1,5 +1,16 @@
-// Demo data for the click-dummy, mirroring the SUPERPORT app design:
-// project PROJ (formerly PRJ) with reviewer, admins, externe (IdP) and qa groups.
+/**
+ * Demo data for the click-dummy, mirroring the SUPERPORT app design:
+ * project PROJ (formerly PRJ) with reviewer, admins, externe (IdP) and qa groups.
+ *
+ * The same seed feeds the unit tests.
+ *
+ * @file        src/dev/seed.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
 const FIRST = ['Anna', 'Eleni', 'Jonas', 'Max', 'Lena', 'Sofia', 'Lukas', 'Mia', 'Felix', 'Emma', 'Paul', 'Hannah', 'Leon', 'Clara', 'Noah', 'Marie', 'Elias', 'Lea', 'Ben', 'Nora', 'Dimitris', 'Katerina', 'Yusuf', 'Aylin', 'Mateo', 'Ines', 'Oskar', 'Frieda', 'Tom', 'Ida', 'Henrik', 'Zoe', 'Nikos', 'Lina', 'Theo', 'Greta', 'Anton', 'Mila', 'Jakob', 'Romy'];
 const LAST = ['Beispiel', 'Papadaki', 'Weber', 'Muster', 'Koch', 'Schulz', 'Wagner', 'Becker', 'Hoffmann', 'Schäfer', 'Richter', 'Klein', 'Wolf', 'Neumann', 'Schwarz', 'Zimmermann', 'Braun', 'Krüger', 'Hartmann', 'Lange', 'Georgiou', 'Nikolaou', 'Demir', 'Yılmaz', 'García', 'Costa', 'Lindqvist', 'Berg', 'Fischer', 'Vogel', 'Jensen', 'Martin', 'Alexiou', 'Keller', 'Roth', 'Frank', 'Huber', 'Lorenz', 'Seidel', 'Kraus'];

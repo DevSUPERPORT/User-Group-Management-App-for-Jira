@@ -1,9 +1,18 @@
-// Protection of critical groups. Blocked groups can neither be shown nor changed
-// by the app. Entries support a trailing or leading "*" wildcard.
-//
-// The Atlassian core groups (administration) and the product access groups are
-// FIXED: they are always blocked and cannot be removed from the block list, in
-// the UI or through the API. The Jira admin can only add further groups.
+/**
+ * Protection of critical groups. Blocked groups can neither be shown nor changed
+ * by the app. Entries support a trailing or leading "*" wildcard.
+ *
+ * The Atlassian core groups (administration) and the product access groups are
+ * FIXED: they are always blocked and cannot be removed from the block list, in
+ * the UI or through the API. The Jira admin can only add further groups.
+ *
+ * @file        src/core/blocklist.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
 export const CORE_BLOCKED_GROUPS = [
   'site-admins',

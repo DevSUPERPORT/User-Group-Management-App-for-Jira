@@ -1,3 +1,15 @@
+/**
+ * Tests for the Organization Admin API client against a mocked @forge/api fetch: per-site connection, group
+ * creation, memberships with retries, auth errors, IdP metadata and disconnect.
+ *
+ * @file        test/orgClient.test.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 

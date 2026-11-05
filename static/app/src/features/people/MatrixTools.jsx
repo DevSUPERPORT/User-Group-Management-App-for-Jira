@@ -1,3 +1,15 @@
+/**
+ * Helpers for the people table: an accessible dropdown MenuButton (filters, column choice) and loading/saving
+ * which group columns are hidden, per project and in this browser only.
+ *
+ * @file        static/app/src/features/people/MatrixTools.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useI18n } from '../../i18n/index.jsx';

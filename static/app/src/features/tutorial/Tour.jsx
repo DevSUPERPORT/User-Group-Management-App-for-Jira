@@ -1,3 +1,15 @@
+/**
+ * First-run tour: useTutorial decides per user and surface whether to show it, TutorialButton restarts it, and
+ * Tour draws the spotlight and step cards over the targets defined in steps.js.
+ *
+ * @file        static/app/src/features/tutorial/Tour.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion, useIsPresent } from 'framer-motion';

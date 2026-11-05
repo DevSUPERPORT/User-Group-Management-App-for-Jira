@@ -1,3 +1,15 @@
+/**
+ * UC-03 user picker: search people by name or email and add several at once; people who are already members are
+ * marked.
+ *
+ * @file        static/app/src/features/groups/UserPicker.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

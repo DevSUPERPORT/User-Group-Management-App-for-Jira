@@ -1,3 +1,16 @@
+/**
+ * Jira admin export and import of all app data between installations on the same site. The file is encrypted and
+ * decrypted in the browser (exportCrypto.js) and moved in pages through the exportData/importData resolvers, with
+ * progress and validation.
+ *
+ * @file        static/app/src/features/admin/DataTransfer.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

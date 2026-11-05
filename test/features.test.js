@@ -1,3 +1,15 @@
+/**
+ * Service tests for time-limited memberships and the expiry run, undo, access reviews, pasted lists, the member
+ * CSV export, "My groups", auditor access and configuration undo.
+ *
+ * @file        test/features.test.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';

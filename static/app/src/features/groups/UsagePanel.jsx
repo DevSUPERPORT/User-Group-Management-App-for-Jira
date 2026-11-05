@@ -1,3 +1,15 @@
+/**
+ * UC-06 where-used panel of a group: nine Jira and Confluence checks shown as cards with their findings, unused
+ * checks collapsed into one line and failed checks reported as such.
+ *
+ * @file        static/app/src/features/groups/UsagePanel.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

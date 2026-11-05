@@ -1,3 +1,15 @@
+/**
+ * Small i18n layer: I18nProvider with the German and English dictionaries, a minimal ICU formatter ({name} and one
+ * level of plural), date, time and relative-time helpers, and resolveLanguage for Jira's locale.
+ *
+ * @file        static/app/src/i18n/index.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { createContext, useContext, useMemo } from 'react';
 import de from './de.js';
 import en from './en.js';

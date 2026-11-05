@@ -1,4 +1,17 @@
-// Forge wiring of the Rovo actions (logic in rovoActions.js).
+/**
+ * Forge wiring of the Rovo actions (logic in rovoActions.js).
+ *
+ * Builds the service with the real Forge adapters and an audit log that tags every entry "via Rovo", and exports
+ * the actions that src/index.js hands to the manifest.
+ *
+ * @file        src/rovo.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { createService } from './core/service.js';
 import { jiraClient } from './forge/jiraClient.js';
 import { createOrgClient } from './forge/orgClient.js';

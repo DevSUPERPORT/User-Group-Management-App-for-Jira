@@ -1,8 +1,17 @@
+/**
+ * UC-06: where is a group used in Jira? Every check stands alone and reports
+ * ok / error / unavailable; a failed check is never shown as "not used".
+ *
+ * @file        src/forge/usage.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { route } from '@forge/api';
 import { call, check, mapLimit } from './http.js';
-
-// UC-06: where is a group used in Jira? Every check stands alone and reports
-// ok / error / unavailable; a failed check is never shown as "not used".
 
 const PROJECT_CAP = 50;
 

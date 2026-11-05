@@ -1,3 +1,15 @@
+/**
+ * Browser entry point of the Custom UI: loads the Inter font and the stylesheets and mounts <App/>. In the
+ * click-dummy, ?motion=off switches all animations off for screenshots and UI tests.
+ *
+ * @file        static/app/src/main.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@fontsource-variable/inter';

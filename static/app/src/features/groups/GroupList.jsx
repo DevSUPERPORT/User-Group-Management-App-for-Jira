@@ -1,3 +1,15 @@
+/**
+ * Searchable, keyboard-navigable list of the project's groups with member counts and badges (review due, IdP sync,
+ * created under an earlier project key).
+ *
+ * @file        static/app/src/features/groups/GroupList.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { AnimatePresence, motion } from 'framer-motion';
 import { useI18n } from '../../i18n/index.jsx';
 import { Icon } from '../../components/Icon.jsx';

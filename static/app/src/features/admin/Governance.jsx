@@ -1,3 +1,15 @@
+/**
+ * Governance parts of the admin page: compliance cards (reviews due, ending memberships, open requests, Confluence
+ * index state), the review and automation settings, and a read-only preview of the deactivated-account cleanup.
+ *
+ * @file        static/app/src/features/admin/Governance.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

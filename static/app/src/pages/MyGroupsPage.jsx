@@ -1,3 +1,15 @@
+/**
+ * Project page "My groups" for project members: the viewer's own groups of this project with their end dates, and
+ * requests for access to further groups.
+ *
+ * @file        static/app/src/pages/MyGroupsPage.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../api/client.js';

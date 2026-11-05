@@ -1,5 +1,16 @@
-// RFC 4180 CSV with a leading BOM so Excel opens umlauts correctly.
-// Cells starting with =, +, -, @ are prefixed to prevent formula injection.
+/**
+ * RFC 4180 CSV with a leading BOM so Excel opens umlauts correctly.
+ * Cells starting with =, +, -, @ are prefixed to prevent formula injection.
+ *
+ * Used for the member export and the audit log export.
+ *
+ * @file        src/core/csv.js
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
 
 function escapeCell(value) {
   if (value === null || value === undefined) return '';

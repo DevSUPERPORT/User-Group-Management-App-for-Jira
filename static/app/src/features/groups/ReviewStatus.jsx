@@ -1,3 +1,15 @@
+/**
+ * Periodic access review status of a group: a banner with a dialog to record the review while one is due,
+ * otherwise the "last reviewed" line.
+ *
+ * @file        static/app/src/features/groups/ReviewStatus.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../../api/client.js';

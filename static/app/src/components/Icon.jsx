@@ -1,4 +1,16 @@
-// Stroke icons (24px grid, currentColor), matching the design's inline SVGs.
+/**
+ * Stroke icons (24px grid, currentColor), matching the design's inline SVGs.
+ *
+ * Icon renders one of the named paths at any size.
+ *
+ * @file        static/app/src/components/Icon.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 const PATHS = {
   plus: <path d="M12 5v14M5 12h14" />,
   sparkle: <path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" />,

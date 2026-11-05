@@ -1,3 +1,15 @@
+/**
+ * Small UI building blocks used everywhere: Spinner, DrawCheck, Button with loading and success states,
+ * IconButton, CountUp, Avatar, Skeleton, Checkbox, Pill and GroupName.
+ *
+ * @file        static/app/src/components/primitives.jsx
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 import { forwardRef, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, animate, motion, useReducedMotion } from 'framer-motion';
 import { Icon } from './Icon.jsx';

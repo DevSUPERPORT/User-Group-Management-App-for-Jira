@@ -1,4 +1,16 @@
-/* SUPERPORT design tokens (from the "Group & User Management – App-Design" canvas). */
+/**
+ * SUPERPORT design tokens (from the "Group & User Management – App-Design" canvas).
+ *
+ * Colours, radii, shadows, easing and font for light mode, redefined for Jira's dark theme.
+ *
+ * @file        static/app/src/styles/tokens.css
+ * @app         Group Self-Service for Jira
+ * @author      George Papasotiriou
+ * @company     SUPERPORT
+ * @created     2026-10-26
+ * @updated     2026-11-05
+ */
+
 :root {
   --bg: #f5f4f1;
   --surface: #ffffff;
