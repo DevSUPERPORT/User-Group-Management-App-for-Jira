@@ -3,14 +3,15 @@
  * audit log, plus realistic latency so loading states can be seen.
  *
  * Mirrors the per-surface resolver lists and the READS list of src/index.js; ?maintenance=readonly|on previews the
- * kill-switch screens locally.
+ * kill-switch screens locally; ?ai=on|stopped previews the AI switch turned on, or turned on but stopped by SUPERPORT
+ * (AI_BUDGET {"stop":true}); without it AI features are off, as on a fresh installation.
  *
  * @file        static/app/src/api/demoBackend.js
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 import { createService } from '../../../../src/core/service.js';
@@ -53,6 +54,8 @@ export function createDemoBackend() {
   const params = new URLSearchParams(window.location.search);
   const seed = createSeed();
   if (params.get('governance') !== 'off') addGovernanceDemo(seed);
+  const ai = params.get('ai');
+  if (ai === 'on' || ai === 'stopped') seed.store.config = { ...seed.store.config, aiEnabled: true };
   const service = createService({
     jira: memoryJira(seed.jira),
     // ?org=off simulates a site that has not stored its organization connection yet.
@@ -61,6 +64,8 @@ export function createDemoBackend() {
     confluence: memoryConfluence(seed.jira, { available: params.get('confluence') !== 'off' }),
     store: memoryStore(seed.store),
     audit: memoryAudit(seed.audit),
+    // Click-dummy only: in Jira AI_BUDGET comes from the server's environment.
+    env: { AI_BUDGET: JSON.stringify({ stop: ai === 'stopped' }) },
   });
   // Build the page-restriction index once, as the hourly trigger would.
   const ready = service.runConfluenceIndex({ budget: 100 });

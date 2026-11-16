@@ -171,6 +171,8 @@ Two tabs: **Configuration** and **Audit log (all projects)**.
 | Allow time-limited memberships | Enables end dates and automatic removal |
 | Auditor groups | Members can read and export the full audit log |
 
+**AI features (Rovo agent)** has its own section: tick **Turn on AI features** and click **Save**. It is off by default, also on installations that were set up before the switch existed. While it is off, the **Ask Rovo** button and the Rovo hint in the tour are hidden and the Rovo agent (Part 5) refuses every request. AI results can be wrong, so review them.
+
 ### 3.3 Governance & automation
 
 | Setting | What it does |
@@ -229,6 +231,18 @@ Open **Rovo** in Jira and choose the **Group Self-Service for Jira** agent. Ask 
 - *"Show pending access requests and expiring memberships."*
 
 The agent **always tells you what it will do and waits for your OK** before changing anything. It never guesses between people with similar names. Its changes are tagged *via Rovo* in the audit log and can be undone in the app.
+
+The agent only works after a Jira admin has turned on **AI features (Rovo agent)** on the app's admin page (**Jira settings** → **Apps** → **Group Self-Service for Jira** → **Configuration**; off by default). Until then it answers that the AI features are turned off and where a Jira admin can turn them on, and the project page shows no **Ask Rovo** button.
+
+---
+
+## Platform limits
+
+The app runs on Atlassian Forge. Atlassian limits compute time, storage, invocations and API requests for all Forge apps, and the Atlassian Administration API that manages groups has its own rate limits. What this means in practice:
+
+- Larger changes, such as many people at once or an offboarding, are applied in batches, one group after the other. They can take a little longer.
+- The Confluence overview ("where is this group used?") is built in small batches in the background, so new pages may appear with a delay.
+- If a limit is reached, the app shows an error instead of a success message. The audit log shows exactly which changes went through; repeat the rest a little later.
 
 ---
 

@@ -70,6 +70,10 @@ modules:
         - The bulk actions (same groups as another person, offboard a person, copy members between groups, undo the last change)
           work in two steps: call them first WITHOUT confirm, show the returned "planned" list, ask the user, and only then call
           the same action again with confirm: true. Never set confirm: true on the first call.
+        - If an action answers with code AI_DISABLED, tell the user its error message: the AI features of this app are turned
+          off and a Jira administrator can turn them on in the app's configuration. Do not call other actions or retry.
+        - If an action answers with code AI_STOPPED, tell the user exactly its error message (the app vendor has turned the AI
+          features off for now; there is no setting to change). Do not call other actions or retry.
         - If an addition fails with GROUP_USED_ELSEWHERE, explain that the group also grants access in the listed other projects,
           so only a Jira admin can add people to it; project admins only manage access within their own project.
         - When the user says they made a mistake, offer "undo the last change".

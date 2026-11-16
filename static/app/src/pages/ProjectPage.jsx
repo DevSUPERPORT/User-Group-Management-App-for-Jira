@@ -1,18 +1,19 @@
 /**
  * Main page for project admins in the project settings: tabs for groups, people, access requests and the project's
- * audit log, with create group, member view, Rovo and the tour.
+ * audit log, with create group, member view, "Ask Rovo" (only while AI features are effectively on) and the tour.
  *
  * @file        static/app/src/pages/ProjectPage.jsx
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { call, openModule, openRovo } from '../api/client.js';
+import { aiOn } from '../features/ai.js';
 import { useI18n } from '../i18n/index.jsx';
 import { Footer, Header, Tabs } from '../components/Shell.jsx';
 import { Button } from '../components/primitives.jsx';
@@ -46,6 +47,8 @@ export function ProjectPage() {
   const [creating, setCreating] = useState(0);
   const [highlightId, setHighlightId] = useState(null);
   const [pending, setPending] = useState(0);
+  // AI entry points ("Ask Rovo", the Rovo hint in the tour) only while AI is effectively on; off until bootstrap says so.
+  const [ai, setAi] = useState(false);
   const tour = useTutorial('project', Boolean(boot));
 
   const load = useCallback(() => {
@@ -53,11 +56,15 @@ export function ProjectPage() {
     call('bootstrap')
       .then((res) => {
         setBoot(res);
+        setAi(aiOn(res));
         setGroups(res.groups);
         setPending(res.pendingRequests ?? 0);
         setSelectedId((id) => id ?? res.groups[0]?.groupId ?? null);
       })
-      .catch(setError);
+      .catch((err) => {
+        setAi(false);
+        setError(err);
+      });
   }, []);
 
   useEffect(load, [load]);
@@ -76,6 +83,8 @@ export function ProjectPage() {
       inFlight = true;
       call('bootstrap')
         .then((res) => {
+          // Also picks up a changed AI switch (a Jira admin saved it, or SUPERPORT stopped AI) without a reload.
+          setAi(aiOn(res));
           setGroups(res.groups);
           setPending(res.pendingRequests ?? 0);
           setSelectedId((id) => (res.groups.some((g) => g.groupId === id) ? id : res.groups[0]?.groupId ?? null));
@@ -144,9 +153,11 @@ export function ProjectPage() {
             <Button variant="ghost" icon="eye" disabled={!boot} title={t('project.memberViewHint')} onClick={() => openModule('gum-my-groups', project?.key)}>
               {t('project.memberView')}
             </Button>
-            <Button variant="ghost" icon="sparkle" disabled={!boot} title={t('project.askRovoHint')} onClick={() => openRovo(t('project.rovoPrompt', { key: project?.key })).then((ok) => ok || notify({ type: 'info', title: t('project.rovoUnavailable') }))}>
-              {t('project.askRovo')}
-            </Button>
+            {ai && (
+              <Button variant="ghost" icon="sparkle" title={t('project.askRovoHint')} onClick={() => openRovo(t('project.rovoPrompt', { key: project?.key })).then((ok) => ok || notify({ type: 'info', title: t('project.rovoUnavailable') }))}>
+                {t('project.askRovo')}
+              </Button>
+            )}
             <TutorialButton
               disabled={!boot}
               onClick={() => {
@@ -237,7 +248,7 @@ export function ProjectPage() {
       </main>
       <Footer />
 
-      <AnimatePresence>{tour.open && <Tour surface="project" onClose={tour.close} />}</AnimatePresence>
+      <AnimatePresence>{tour.open && <Tour surface="project" ai={ai} onClose={tour.close} />}</AnimatePresence>
       <AnimatePresence>{creating > 0 && boot && <CreateGroupDialog key={creating} project={project} prefix={boot.prefix} groups={groups} onClose={() => setCreating(0)} onCreated={onCreated} />}</AnimatePresence>
     </div>
   );

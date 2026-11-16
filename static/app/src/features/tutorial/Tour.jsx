@@ -7,7 +7,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,7 +18,7 @@ import { useI18n } from '../../i18n/index.jsx';
 import { Button } from '../../components/primitives.jsx';
 import { Icon } from '../../components/Icon.jsx';
 import { ease } from '../../motion.js';
-import { TOURS, TUTORIAL_VERSIONS } from './steps.js';
+import { TUTORIAL_VERSIONS, tourSteps } from './steps.js';
 
 const GAP = 14; // between target and card
 const PAD = 6; // spotlight padding around the target
@@ -91,11 +91,12 @@ function place(rect, card, docWidth) {
   return { top: rect.top + rect.height + GAP, left, width };
 }
 
-export function Tour({ surface, onClose }) {
+// ai: whether AI features are effectively on; off drops AI steps and points (see steps.js).
+export function Tour({ surface, onClose, ai = false }) {
   const { t } = useI18n();
   const reduce = useReducedMotion();
   // Optional steps (e.g. "Request access" when requests are off) are dropped if their target is missing.
-  const [steps] = useState(() => TOURS[surface].filter((s) => !s.optional || document.querySelector(s.target)));
+  const [steps] = useState(() => tourSteps(surface, { ai }).filter((s) => !s.optional || document.querySelector(s.target)));
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState(null);
   const [card, setCard] = useState(null);
@@ -201,7 +202,7 @@ export function Tour({ surface, onClose }) {
   // it is top-aligned, and scrolling to the span's end would hide it.
   cardBelowRef.current = pos.top + cardHeight >= spot.top + spot.height;
   const move = reduce ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 32 };
-  const points = Array.from({ length: step.points ?? 0 }, (_, i) => t(key(`p${i + 1}`)));
+  const points = step.pointNumbers.map((n) => t(key(`p${n}`)));
 
   return createPortal(
     <div className={`tour-layer ${isPresent ? '' : 'is-leaving'}`} onKeyDown={isPresent ? onKeyDown : undefined}>

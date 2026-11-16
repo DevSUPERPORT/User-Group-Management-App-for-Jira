@@ -7,7 +7,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 export default {
@@ -301,6 +301,10 @@ export default {
   'config.rolesHint': "What project members and auditors see, and what project admins may additionally do.",
   'config.memberView': "Show the \"My groups\" page to project members (read-only, own groups only)",
   'config.expiry': "Allow time-limited memberships (end automatically, with an audit entry)",
+  'config.ai': "AI features (Rovo agent)",
+  'config.aiToggle': "Turn on AI features",
+  'config.aiHint': "Off (default): AI features are off – the “Ask Rovo” button is hidden and the Rovo agent “Group Self-Service for Jira” refuses every request. On: AI results can be wrong and must be reviewed.",
+  'config.aiStopped': "Temporarily turned off by the app vendor. Your setting is kept and applies again once AI is available.",
   'config.auditors': "Auditor groups",
   'config.auditorsHint': "Members of these groups may read and export the full audit log of all projects, nothing else. They find it in the Jira sidebar under Apps → “Group audit log” (hover “Apps” to open the list).",
   'config.openAuditPage': "Open the audit log page",
@@ -490,6 +494,8 @@ export default {
   'error.reason.DURATION': "This duration is not available.",
   'error.reason.EXPIRY_DISABLED': "Time-limited memberships are switched off.",
   'audit.viaRovo': "via Rovo",
+  'audit.aiOn': "AI features on",
+  'audit.aiOff': "AI features off",
   'audit.noteTag': "Note",
   'audit.reviewRemoved': "{count, plural, =0 {nobody removed} one {# removed} other {# removed}}",
   'audit.reason.deactivated': "Account deactivated",

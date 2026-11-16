@@ -7,7 +7,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 export default {
@@ -301,6 +301,10 @@ export default {
   'config.rolesHint': "Was Projektmitglieder und Auditoren sehen und was Projekt-Admins zusätzlich dürfen.",
   'config.memberView': "Seite „My groups“ für Projektmitglieder anzeigen (nur lesend, nur eigene Gruppen)",
   'config.expiry': "Befristete Mitgliedschaften erlauben (enden automatisch, mit Audit-Eintrag)",
+  'config.ai': "KI-Funktionen (Rovo-Agent)",
+  'config.aiToggle': "KI-Funktionen einschalten",
+  'config.aiHint': "Aus (Standard): KI-Funktionen sind aus – die Schaltfläche „Rovo fragen“ ist ausgeblendet und der Rovo-Agent „Group Self-Service for Jira“ lehnt jede Anfrage ab. An: KI-Ergebnisse können falsch sein und müssen geprüft werden.",
+  'config.aiStopped': "Vorübergehend vom App-Anbieter ausgeschaltet. Deine Einstellung bleibt gespeichert und gilt wieder, sobald die KI freigegeben ist.",
   'config.auditors': "Auditoren-Gruppen",
   'config.auditorsHint': "Mitglieder dieser Gruppen dürfen das gesamte Audit-Log aller Projekte lesen und exportieren, sonst nichts. Sie finden es in der Jira-Seitenleiste unter Apps → „Group audit log“ (mit der Maus auf „Apps“ zeigen, um die Liste zu öffnen).",
   'config.openAuditPage': "Audit-Log-Seite öffnen",
@@ -490,6 +494,8 @@ export default {
   'error.reason.DURATION': "Diese Dauer ist nicht verfügbar.",
   'error.reason.EXPIRY_DISABLED': "Befristete Mitgliedschaften sind ausgeschaltet.",
   'audit.viaRovo': "über Rovo",
+  'audit.aiOn': "KI-Funktionen an",
+  'audit.aiOff': "KI-Funktionen aus",
   'audit.noteTag': "Notiz",
   'audit.reviewRemoved': "{count, plural, =0 {niemand entfernt} one {# entfernt} other {# entfernt}}",
   'audit.reason.deactivated': "Konto deaktiviert",

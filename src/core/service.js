@@ -18,10 +18,11 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 import { AppError, ErrorCodes } from './errors.js';
+import { aiActive, vendorAiStop } from './aiBudget.js';
 
 /**
  * True when Forge reports that the site has no active Marketplace licence. license.active is the current
@@ -75,6 +76,9 @@ export const DEFAULT_CONFIG = Object.freeze({
   // beyond the project admin's own project: 'block' stops that for project admins
   // (Jira admins may still), 'warn' only shows it.
   scopeGuard: 'block',
+  // AI features (the Rovo agent) are off until a Jira admin turns them on (EULA §8.4). Installations without a
+  // stored value count as off.
+  aiEnabled: false,
 });
 
 const PERIODS = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
@@ -126,7 +130,7 @@ function fold(s) {
   return (s ?? '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
-export function createService({ jira, org = null, confluence = null, store, audit, now = () => Date.now(), uuid = () => crypto.randomUUID() }) {
+export function createService({ jira, org = null, confluence = null, store, audit, now = () => Date.now(), uuid = () => crypto.randomUUID(), env = globalThis.process?.env ?? {} }) {
   // ---------------------------------------------------------------- helpers
 
   // Group writes (create group, add/remove members) go through the Atlassian
@@ -483,7 +487,16 @@ export function createService({ jira, org = null, confluence = null, store, audi
       project: { id: project.id, key: project.key, name: project.name, avatarUrl: project.avatarUrl ?? null, previousKeys: record.previousKeys ?? [] },
       user: { accountId: actor.accountId, displayName: actor.displayName, isJiraAdmin: Boolean(perms.jiraAdmin) },
       prefix: prefixFor(project.key),
-      config: { retentionMonths: config.retentionMonths, idpReadOnly: config.idpReadOnly, expiryEnabled: config.expiryEnabled, reviewIntervalMonths: config.reviewIntervalMonths },
+      config: {
+        retentionMonths: config.retentionMonths,
+        idpReadOnly: config.idpReadOnly,
+        expiryEnabled: config.expiryEnabled,
+        reviewIntervalMonths: config.reviewIntervalMonths,
+        aiEnabled: config.aiEnabled === true,
+        aiStopped: vendorAiStop(env),
+        // The effective state (switch on AND no vendor stop): the page shows AI entry points only when it is true.
+        ai: aiActive(config, env),
+      },
       pendingRequests: (await requestsOf(project.id)).filter((r) => r.status === 'pending').length,
       groups,
     };
@@ -1477,6 +1490,8 @@ export function createService({ jira, org = null, confluence = null, store, audi
     return {
       user: { accountId: actor.accountId, displayName: actor.displayName, isJiraAdmin: true },
       config,
+      // SUPERPORT stopped the AI features for all sites (AI_BUDGET): the admin's own switch is kept but has no effect.
+      aiStopped: vendorAiStop(env),
       defaults: { coreBlockedGroups: CORE_BLOCKED_GROUPS, productAccessPatterns: PRODUCT_ACCESS_PATTERNS },
       stats: { managedGroups: managed.length, projects: projects.size },
       orgApi: org ? await org.status() : { configured: false },
@@ -1551,6 +1566,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
       reviewIntervalMonths: REVIEW_INTERVALS.includes(Number(input.reviewIntervalMonths)) ? Number(input.reviewIntervalMonths) : null,
       autoRemoveDeactivated: input.autoRemoveDeactivated === true,
       scopeGuard: SCOPE_GUARDS.includes(input.scopeGuard) ? input.scopeGuard : 'block',
+      aiEnabled: input.aiEnabled === true,
     };
   }
 
@@ -1567,10 +1583,16 @@ export function createService({ jira, org = null, confluence = null, store, audi
         projectId: '*',
         actorAccountId: actor.accountId,
         actorName: actor.displayName,
-        details: reasonDetails(reason, ['undo'], { changed }),
+        // The AI switch also records its new state (on/off), so the log shows who turned it on or off and when.
+        details: reasonDetails(reason, ['undo'], changed.includes('aiEnabled') ? { changed, aiEnabled: next.aiEnabled } : { changed }),
       });
     }
     return { config: next, changed, previous: sanitizeConfig(before) };
+  }
+
+  // The Rovo actions ask this before anything else: AI features run only when a Jira admin turned them on.
+  async function isAiEnabled() {
+    return (await getConfig()).aiEnabled === true;
   }
 
   // ---------------------------------------------------------------- data export / import
@@ -1710,6 +1732,7 @@ export function createService({ jira, org = null, confluence = null, store, audi
     exportAudit,
     adminBootstrap,
     saveConfig,
+    isAiEnabled,
     exportData,
     importData,
     searchGroups,

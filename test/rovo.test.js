@@ -1,13 +1,13 @@
 /**
  * Tests for the Rovo actions on the in-memory backend: identity and permission checks, read actions, member
- * changes, end dates and requests, and the preview-then-confirm bulk actions.
+ * changes, end dates and requests, the preview-then-confirm bulk actions, and the admin-only AI switch (off by default).
  *
  * @file        test/rovo.test.js
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 import test from 'node:test';
@@ -15,21 +15,121 @@ import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';
 import { memoryAudit, memoryConfluence, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
-import { createRovoActions } from '../src/rovoActions.js';
+import { AI_DISABLED_MESSAGE, AI_STOPPED_MESSAGE, createRovoActions } from '../src/rovoActions.js';
+import { vendorAiStop } from '../src/core/aiBudget.js';
 
 const NOW = Date.UTC(2026, 9, 24, 10, 0, 0);
 
-function setup({ idp = [] } = {}) {
+// ai: the app setting "AI features (Rovo agent)"; null = never saved (a fresh or older installation).
+// env: the Forge environment variables (AI_BUDGET); undefined = the process environment.
+function setup({ idp = [], ai = true, env } = {}) {
   const seed = createSeed(NOW);
   seed.store.config.idpGroups.push(...idp);
+  if (ai !== null) seed.store.config.aiEnabled = ai;
   const audit = memoryAudit([]);
   const rovoAudit = { ...audit, append: (e) => audit.append({ ...e, details: { ...(e.details ?? {}), via: 'rovo' } }) };
-  const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira), confluence: memoryConfluence(seed.jira), store: memoryStore(seed.store), audit: rovoAudit, now: () => NOW });
-  const rovo = createRovoActions(service, { now: () => NOW });
+  const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira), confluence: memoryConfluence(seed.jira), store: memoryStore(seed.store), audit: rovoAudit, now: () => NOW, env });
+  const rovo = createRovoActions(service, { now: () => NOW, env });
   // Forge passes the calling user in the invocation context.
   const as = (accountId = 'u-me') => ({ principal: { accountId } });
-  return { rovo, audit, jira: seed.jira, as };
+  return { rovo, service, audit, jira: seed.jira, as };
 }
+
+const adminCtx = (accountId = 'u-me') => ({ accountId, projectId: null, surface: 'admin', license: null });
+
+test('AI switch: off by default, and every Rovo action refuses while it is off', async () => {
+  const { rovo, service, as, jira } = setup({ ai: null });
+  assert.equal(await service.isAiEnabled(), false);
+  assert.equal((await service.adminBootstrap(adminCtx())).config.aiEnabled, false);
+  for (const [name, fn] of Object.entries(rovo)) {
+    const res = await fn({ projectKey: 'PROJ', groupName: 'admins', people: 'Lena Koch', confirm: true }, as());
+    assert.deepEqual(res, { ok: false, error: AI_DISABLED_MESSAGE, code: 'AI_DISABLED', nothingChanged: true }, name);
+  }
+  assert.ok(!jira.groups['g-admins'].members.includes('u-lena-koch'), 'nothing changed');
+  // Saving other settings keeps it off.
+  const saved = await service.saveConfig(adminCtx(), { config: { retentionMonths: 12 } });
+  assert.equal(saved.config.aiEnabled, false);
+});
+
+test('AI switch: only Jira admins can turn it on; the change is logged with on/off; Rovo then works', async () => {
+  const { rovo, service, as, audit, jira } = setup({ ai: false });
+  jira.perms['u-pa'] = { jiraAdmin: false, projectAdminOf: ['10001'] };
+  const config = (await service.adminBootstrap(adminCtx())).config;
+  await assert.rejects(service.saveConfig(adminCtx('u-pa'), { config: { ...config, aiEnabled: true } }), (err) => err.code === 'NOT_ADMIN');
+  assert.equal(await service.isAiEnabled(), false);
+  assert.equal((await rovo.listGroups({ projectKey: 'PROJ' }, as())).code, 'AI_DISABLED');
+
+  const on = await service.saveConfig(adminCtx(), { config: { ...config, aiEnabled: true } });
+  assert.deepEqual(on.changed, ['aiEnabled']);
+  const entry = audit._rows().at(-1);
+  assert.equal(entry.action, 'CONFIG_CHANGED');
+  assert.equal(entry.actorAccountId, 'u-me');
+  assert.deepEqual(entry.details.changed, ['aiEnabled']);
+  assert.equal(entry.details.aiEnabled, true);
+  assert.equal((await service.bootstrap({ accountId: 'u-me', projectId: '10001', surface: 'project', license: null })).config.aiEnabled, true);
+
+  const groups = await rovo.listGroups({ projectKey: 'PROJ' }, as());
+  assert.equal(groups.ok, true);
+  const added = await rovo.addMembers({ projectKey: 'PROJ', groupName: 'admins', people: 'lena.koch@example.com' }, as());
+  assert.equal(added.ok, true);
+  assert.equal(audit._rows().at(-1).details.via, 'rovo');
+
+  await service.saveConfig(adminCtx(), { config: { ...on.config, aiEnabled: false } });
+  assert.equal(audit._rows().at(-1).details.aiEnabled, false);
+  assert.equal((await rovo.listGroups({ projectKey: 'PROJ' }, as())).code, 'AI_DISABLED');
+});
+
+const STOPPED = 'AI features of this app are temporarily turned off by the app vendor. Please try again later.';
+const STOP = { AI_BUDGET: '{"stop":true}' };
+
+test('AI_BUDGET: only a JSON object with stop: true stops; unset, invalid or another shape is no stop and warns once', () => {
+  const warnings = [];
+  const stop = (v) => vendorAiStop(v === undefined ? {} : { AI_BUDGET: v }, (m) => warnings.push(m));
+  assert.equal(stop('{"stop":true}'), true);
+  assert.equal(stop(' {"stop":true,"limit":5,"note":"x"} '), true, 'other fields are ignored');
+  assert.equal(stop('{"stop":false}'), false);
+  assert.equal(stop('{"stop":false,"limit":0}'), false);
+  assert.deepEqual(warnings, [], 'valid values do not warn');
+  assert.equal(stop(undefined), false, 'unset');
+  assert.equal(stop(''), false, 'empty');
+  // Warnings are remembered per value for the whole process (other tests may have seen "unset"), so count new ones.
+  const bad = ['true', '{stop:true}', '{"stop":"true"}', '{"stop":1}', '[true]', 'null', '{}', '{"Stop":true}'];
+  const before = warnings.length;
+  for (const v of bad) {
+    assert.equal(stop(v), false, `no stop for ${JSON.stringify(v)}`);
+    assert.equal(stop(v), false, `still no stop for ${JSON.stringify(v)}`);
+  }
+  assert.equal(warnings.length - before, bad.length, 'one warning per bad value, not one per call');
+  assert.match(warnings.at(-1), /AI_BUDGET/);
+  assert.equal(AI_STOPPED_MESSAGE, STOPPED);
+});
+
+test('AI_BUDGET stop: every Rovo action refuses with the vendor text even when a Jira admin turned AI on', async () => {
+  const { rovo, service, as, jira } = setup({ ai: true, env: STOP });
+  assert.equal(await service.isAiEnabled(), true, "the admin's own setting is kept");
+  for (const [name, fn] of Object.entries(rovo)) {
+    const res = await fn({ projectKey: 'PROJ', groupName: 'admins', people: 'Lena Koch', confirm: true }, as());
+    assert.deepEqual(res, { ok: false, error: STOPPED, code: 'AI_STOPPED', nothingChanged: true }, name);
+  }
+  assert.ok(!jira.groups['g-admins'].members.includes('u-lena-koch'), 'nothing changed');
+  // Customer switch off as well: the vendor text, so nobody looks for a setting that would not help.
+  const off = setup({ ai: false, env: STOP });
+  assert.equal((await off.rovo.listGroups({ projectKey: 'PROJ' }, off.as())).code, 'AI_STOPPED');
+  // The pages are told: the admin page shows the notice, the project page hides "Ask Rovo".
+  assert.equal((await service.adminBootstrap(adminCtx())).aiStopped, true);
+  const boot = await service.bootstrap({ accountId: 'u-me', projectId: '10001', surface: 'project', license: null });
+  assert.equal(boot.config.aiEnabled, true);
+  assert.equal(boot.config.aiStopped, true);
+});
+
+test('AI_BUDGET {"stop":false}: Rovo works when a Jira admin turned AI on, and stays off when not', async () => {
+  const env = { AI_BUDGET: '{"stop":false}' };
+  const { rovo, service, as } = setup({ ai: true, env });
+  assert.equal((await rovo.listGroups({ projectKey: 'PROJ' }, as())).ok, true);
+  assert.equal((await service.adminBootstrap(adminCtx())).aiStopped, false);
+  const off = setup({ ai: false, env });
+  assert.equal((await off.rovo.listGroups({ projectKey: 'PROJ' }, off.as())).code, 'AI_DISABLED');
+});
 
 test('Rovo: no identity, no action', async () => {
   const { rovo } = setup();

@@ -1,6 +1,6 @@
 /**
  * Configuration tab of the Jira admin page: organization connection, project scope, block list, IdP read-only
- * groups, auditor groups, member view, time limits, requests, reviews, automation and scope guard, saved together
+ * groups, auditor groups, member view, time limits, AI features (Rovo agent), requests, reviews, automation and scope guard, saved together
  * and undoable.
  *
  * @file        static/app/src/features/admin/AdminConfig.jsx
@@ -8,7 +8,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -439,6 +439,22 @@ export function AdminConfig({ initial, onSaved }) {
             noResults={t('config.noResults')}
             onAdd={(v) => update({ auditorGroups: addUnique(draft.auditorGroups ?? [], v) })}
           />
+        </div>
+      </Section>
+
+      {/* Own section so the AI switch is easy to find; off by default (also for installations that never saved it). */}
+      <Section id="sec-ai" title={t('config.ai')} delay={0.1}>
+        <div className="stack-4">
+          <Checkbox id="ai-on" checked={draft.aiEnabled === true} onChange={(v) => update({ aiEnabled: v })}>
+            {t('config.aiToggle')}
+          </Checkbox>
+          <p className="muted small checkbox-hint">{t('config.aiHint')}</p>
+          {initial.aiStopped && (
+            <p className="notice notice-warn">
+              <Icon name="alert" size={16} />
+              <span>{t('config.aiStopped')}</span>
+            </p>
+          )}
         </div>
       </Section>
 

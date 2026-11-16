@@ -3,6 +3,9 @@
  * wiring is in rovo.js so the actions can be tested against the in-memory backend).
  *
  * Safety model:
+ * - AI features are off by default: every action first checks the app setting "AI features (Rovo agent)", which
+ *   only a Jira admin can turn on (admin page, saveConfig), and refuses while it is off. SUPERPORT can also stop
+ *   them for every site through App Status (Forge variable AI_BUDGET, see core/aiBudget.js).
  * - The caller is the Atlassian user talking to Rovo; their account id comes from
  *   the Forge invocation context, never from the chat.
  * - Every action runs through the same service as the app: project admin rights,
@@ -16,11 +19,18 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 import { AppError, ErrorCodes } from './core/errors.js';
 import { requireAvailable } from './core/maintenance.js';
+import { AI_STOPPED_MESSAGE, vendorAiStop } from './core/aiBudget.js';
+
+export { AI_STOPPED_MESSAGE };
+
+// Names the exact place, so the user can pass it on to a Jira admin.
+export const AI_DISABLED_MESSAGE =
+  'AI features of this app are turned off. A Jira administrator can turn them on in the app configuration: Jira settings → Apps → Group Self-Service for Jira → Configuration → "AI features (Rovo agent)".';
 
 export const MAX_ADD = 10;
 export const MAX_REMOVE = 5;
@@ -58,15 +68,18 @@ export function accountIdOf(payload, context) {
   return payload?.context?.accountId ?? context?.principal?.accountId ?? payload?.context?.principal?.accountId ?? context?.accountId ?? null;
 }
 
-export function createRovoActions(service, { now = () => Date.now() } = {}) {
+export function createRovoActions(service, { now = () => Date.now(), env = globalThis.process?.env ?? {} } = {}) {
   // Wraps an action: passes the kill switch first (APP_MAINTENANCE, see
-  // core/maintenance.js), resolves the caller and project, and turns errors into a
+  // core/maintenance.js), then SUPERPORT's AI stop (AI_BUDGET, see core/aiBudget.js), then the AI switch (off unless
+  // a Jira admin turned it on), resolves the caller and project, and turns errors into a
   // clear answer Rovo can relay ("nothing was changed") instead of a stack trace.
   // kind defaults to 'write', so a new action is refused in read-only mode unless
   // it is marked 'read' on purpose.
   const action = (fn, kind = 'write') => async (payload, context) => {
     try {
       requireAvailable(kind);
+      if (vendorAiStop(env)) return { ok: false, error: AI_STOPPED_MESSAGE, code: 'AI_STOPPED', nothingChanged: true };
+      if (!(await service.isAiEnabled())) return { ok: false, error: AI_DISABLED_MESSAGE, code: 'AI_DISABLED', nothingChanged: true };
       const accountId = accountIdOf(payload, context);
       if (!accountId) return { ok: false, error: 'Could not identify the calling user; nothing was done.', nothingChanged: true };
       const project = payload?.projectKey ? await service.resolveProjectKey(payload.projectKey) : null;

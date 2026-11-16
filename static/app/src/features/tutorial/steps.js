@@ -3,12 +3,15 @@
  * and, for steps with points, .p1 … .pN. Raise a surface's version when its tour
  * changes enough that its users should see it again.
  *
+ * AI: a step with ai: true, and the points listed in a step's aiPoints (1-based), appear only while AI features are
+ * effectively on (Tour's ai prop); otherwise the tour never mentions Rovo.
+ *
  * @file        static/app/src/features/tutorial/steps.js
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-16
  */
 
 export const TUTORIAL_VERSIONS = { project: 2, member: 1, admin: 3, auditor: 1 };
@@ -23,7 +26,7 @@ export const TOURS = {
     { id: 'people', target: '#project-tabs-people' },
     { id: 'requests', target: '#project-tabs-requests' },
     { id: 'audit', target: '#project-tabs-audit' },
-    { id: 'done', target: '[data-tour="help"]', points: 2 },
+    { id: 'done', target: '[data-tour="help"]', points: 2, aiPoints: [2] },
   ],
   member: [
     { id: 'welcome' },
@@ -54,3 +57,16 @@ export const TOURS = {
     { id: 'done', target: '[data-tour="help"]' },
   ],
 };
+
+/**
+ * The steps of a surface's tour for this user: without AI, steps marked ai and the points in aiPoints are left out.
+ * Each step gets pointNumbers, the numbers of the i18n points (p1 … pN) to show.
+ */
+export function tourSteps(surface, { ai = false } = {}) {
+  return (TOURS[surface] ?? [])
+    .filter((s) => ai || !s.ai)
+    .map((s) => ({
+      ...s,
+      pointNumbers: Array.from({ length: s.points ?? 0 }, (_, i) => i + 1).filter((n) => ai || !(s.aiPoints ?? []).includes(n)),
+    }));
+}

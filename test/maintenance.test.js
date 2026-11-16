@@ -33,6 +33,7 @@ let counts;
 
 function reset() {
   const seed = createSeed(Date.now());
+  seed.store.config.aiEnabled = true; // the Rovo actions run only with the AI switch on (tested in rovo.test.js)
   const secrets = new Map();
   live = {
     jira: memoryJira(seed.jira),

@@ -48,6 +48,7 @@ function EntryTags({ entry, t, fmt }) {
   const d = entry.details ?? {};
   const tags = [];
   if (d.via === 'rovo') tags.push({ key: 'via', text: t('audit.viaRovo'), tone: 'rovo' });
+  if (entry.action === 'CONFIG_CHANGED' && typeof d.aiEnabled === 'boolean') tags.push({ key: 'ai', text: t(d.aiEnabled ? 'audit.aiOn' : 'audit.aiOff') });
   if (entry.action === 'ACCESS_REQUESTED' && d.reason) tags.push({ key: 'why', text: `“${d.reason}”` });
   else if (d.reason && t(`audit.reason.${d.reason}`) !== `audit.reason.${d.reason}`) tags.push({ key: 'reason', text: t(`audit.reason.${d.reason}`), title: d.note });
   else if (d.note) tags.push({ key: 'note', text: t('audit.noteTag'), title: d.note });
