@@ -14,7 +14,7 @@ A SUPERPORT [Atlassian Forge](https://developer.atlassian.com/platform/forge/) a
 ![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Rovo](https://img.shields.io/badge/Rovo-agent-6554C0)
-![Tests](https://img.shields.io/badge/tests-76%20passing-2EA043)
+![Tests](https://img.shields.io/badge/tests-143%20passing-2EA043)
 ![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20DE-lightgrey)
 
 </div>
@@ -40,7 +40,8 @@ one-click undo for every change. Jira admins keep global control.
 | 🔍 **Where-used analysis** | 9 checks: permission schemes, workflows, project roles, issue security levels, notification schemes, shared filters, dashboards, Confluence space permissions and page restrictions. |
 | ⚠️ **Impact before removal** | The confirmation shows exactly which schemes and workflows a person loses access through. |
 | ↩️ **Undo everything** | Every add, remove, end date, review and config change can be undone; failed items get a Retry. |
-| ⏳ **Time-limited access** | Set an end date per membership; an hourly job removes expired access and logs it. |
+| ⏳ **Time-limited access** | Set an end date per membership; an hourly job removes expired access and logs it (in Jira-admin mode it queues the removal for a Jira admin). |
+| 🛡️ **Jira-admin mode** | No organization key needed: Jira admins' changes apply at once as themselves (Jira REST `asUser()`), project admins' changes wait in **Changes to apply** until a Jira admin applies or rejects them (bulk, idempotent, re-validated, audited). |
 | 📨 **Access requests** | Project members request access (with reason and 7/30/90 days); project admins approve or deny. |
 | ✅ **Access reviews** | Periodic reviews (3/6/12 months) with due badges, mandatory confirmation, and audit notes — ISO 27001 friendly. |
 | 📜 **Audit log** | Append-only, filterable, CSV export, project or global scope, configurable retention. Read-only page for auditors. |
@@ -56,7 +57,7 @@ one-click undo for every change. Jira admins keep global control.
 | **Project settings → Apps → Group Self-Service for Jira** | Project admins | Groups, members, people matrix, where-used, requests, audit log |
 | **Project page → My groups** | Project members | Own groups (read-only) and access requests |
 | **Apps → Group audit log** | Auditors & Jira admins | Read-only global audit log with CSV export |
-| **Admin → Group Self-Service for Jira** | Jira admins | Configuration, block list, IdP groups, compliance overview, Org API status |
+| **Admin → Group Self-Service for Jira** | Jira admins | Configuration (incl. how group changes are made), changes to apply, block list, IdP groups, compliance overview, optional organization connection |
 | **Rovo → Group Self-Service for Jira** | Project admins | Conversational group management |
 
 Background jobs: daily audit retention, hourly membership expiry, hourly Confluence restriction
@@ -71,7 +72,8 @@ flowchart LR
     Jobs["Scheduled triggers"] --> S
     R --> S["Core service<br/>src/core"]
     S --> J["jiraClient<br/>Jira REST (reads)"]
-    S --> O["orgClient<br/>Organization Admin API (writes)"]
+    S --> U["jiraUserWriter<br/>Jira REST asUser (writes, Jira-admin mode)"]
+    S --> O["orgClient<br/>Organization Admin API (writes, optional)"]
     S --> C["confluenceClient<br/>usage checks"]
     S --> K["kvsStore<br/>Forge KVS"]
     S --> A["sqlAudit<br/>Forge SQL"]
@@ -120,6 +122,10 @@ Open http://localhost:3000. Useful query parameters:
 | `fast` | No simulated latency |
 | `motion=off` | Skip animations |
 | `org=off` | Simulate a missing Organization API key |
+| `mode=jiraAdmin\|org` | How group changes are made (unset = an older installation: organization mode while connected). Jira-admin mode seeds a few waiting changes |
+| `as=projectAdmin` | The demo user is a project admin without Jira admin rights on the project page (their changes wait) |
+| `consent=needed` | Simulate a Jira admin who has not allowed the app to act on their behalf yet ("Grant access") |
+| `env=development` | Show the TEST ONLY switch on the admin page |
 
 `npm run build:demo` produces a static copy in `static/app/demo-build/` that can be hosted anywhere.
 
@@ -162,10 +168,38 @@ forge install --site <site>.atlassian.net --product jira -e production
 `npm run validate` checks the manifest against the Forge schema offline. `forge tunnel` serves the
 UI from the Vite dev server on port 3000.
 
-### Connect the Organization API
+### How group changes are made (Jira-admin mode)
 
-Atlassian does not let apps create groups or change memberships through the Jira REST API, so all
-group **writes** go through the Atlassian Organization Admin API (reads still use Jira).
+Atlassian rejects group writes from the app user (`asApp()` → 403 on `POST /rest/api/3/group`,
+`POST`/`DELETE /rest/api/3/group/user`), but accepts them as the signed-in user when that user is a Jira
+administrator. The admin page setting **How group changes are made** (`groupChanges`) chooses:
+
+| Mode | Jira admin's change | Project admin's change | Scheduled removals (end date, deactivated accounts) |
+| --- | --- | --- | --- |
+| **Jira administrators apply changes** (`jiraAdmin`, recommended) | Applies at once via Jira REST `asUser()` | Becomes a pending change (KVS `change:<projectId>:<id>`) that a Jira admin applies or rejects under **Changes to apply** | Queued as pending removals ("Access ended on …", "Account deactivated"), deduplicated |
+| **Organization connection applies changes** (`org`) | Organization Admin API | Organization Admin API | Removed directly |
+
+- **Default:** `jiraAdmin` for new installations and whenever no organization connection exists. Installations that
+  already had a connection and never saved the setting keep `org` (no surprise change on upgrade). `org` without a
+  connection is effectively `jiraAdmin`, and the admin page says so. Connecting or disconnecting never flips the mode.
+- **Guardrails** (name prefix and length, blocked/core/product-access groups, IdP read-only, scope guard, licence) run
+  when a change is requested **and** again when it is applied. Apply is idempotent; partial failures are reported per
+  change; Jira's 403 shows "Only Jira administrators can apply changes".
+- **Consent:** `asUser()` needs the user's one-time "Allow access". Without it the app shows **Grant access**; that
+  button calls the `grantAccess` resolver, which lets Forge's own authentication error through so Jira shows its
+  consent prompt. Rovo actions pass the error on as well.
+- **Audit:** `CHANGE_REQUESTED`, `CHANGE_APPLIED`, `CHANGE_REJECTED`, `CHANGE_WITHDRAWN` plus the usual
+  `GROUP_CREATED` / `MEMBER_ADDED` / `MEMBER_REMOVED` entries (with `changeRef` and the requester).
+- **No new scopes or egress:** `manage:jira-configuration` already covers the endpoints; `requestJira` needs no egress.
+- **TEST ONLY switch** (Forge development environment only): accounts listed under *TEST ONLY – treat these accounts
+  as project admins* count as project admins on project pages and in Rovo, so the project-admin flow can be tested
+  with one Jira admin account. The service honours it only when Forge reports `environmentType` `DEVELOPMENT`
+  (`getAppContext()`, fallback: the invocation context); production and staging ignore and hide it.
+
+### Optional: connect the Organization API
+
+Only needed for **Organization connection applies changes**: project admins' changes then apply at once and the
+scheduled removals run by themselves. Please note that an organization API key has full organization admin access.
 
 Every site connects **its own** organization; there is no app-wide key (a Marketplace app must
 never act with another customer's credentials).
@@ -174,7 +208,7 @@ never act with another customer's credentials).
    scoped to user and group management where scopes are offered, with a short expiry. Never a
    personal API token or password.
 2. A Jira admin opens the app's admin page (**Jira settings → Apps → Group Self-Service for Jira**),
-   enters the organization ID (part of the address `admin.atlassian.com/o/<org-id>/…`) and the key,
+   clicks **Connect an organization**, enters the organization ID (part of the address `admin.atlassian.com/o/<org-id>/…`) and the key,
    and clicks **Check and save**. The app validates both against Atlassian first; with several user
    directories it asks which one to use.
 3. The key is kept in Forge secret storage (`kvs.setSecret`): encrypted, scoped to the installation,
@@ -209,6 +243,8 @@ files from another site and weakened settings are refused. Importing is safe to 
 
 - The trusted context (project, account) always comes from Forge, never from the client.
 - Every write re-checks project-admin rights and group ownership (stored project id **and** key prefix).
+- In Jira-admin mode writes run as the signed-in Jira admin (`asUser()`), never for anyone else: project admins'
+  changes wait for a Jira admin, who applies them with every guardrail checked again.
 - Blocked and IdP-synced groups are never changed, by the UI, the API, the Rovo agent or the automations.
 - Rovo actions act as the calling user, add at most 10 / remove at most 5 people per call, and never guess ambiguous names.
 - The audit log is append-only; its only delete is the configured retention purge.

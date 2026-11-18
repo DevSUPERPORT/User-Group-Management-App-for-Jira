@@ -292,15 +292,19 @@ test('discovered groups (no description yet) can get one; blocked groups cannot'
   assert.equal(await codeOf(service.updateDescription(ctx(), { groupId: 'g-jsw', description: 'x' })), 'GROUP_NOT_IN_PROJECT');
 });
 
-test('writes need the Organization API; without it nothing is written', async () => {
+test('without an organization connection a project admin changes nothing in Jira directly: every write waits', async () => {
   const seed = createSeed(NOW);
+  seed.jira.perms['u-me'] = { jiraAdmin: false, projectAdminOf: ['10001'] };
   const audit = memoryAudit([]);
   const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira, { configured: false }), store: memoryStore(seed.store), audit, now: () => NOW });
   const ctx = { accountId: 'u-me', projectId: '10001', surface: 'project', license: null };
   await service.bootstrap({ ...ctx });
-  assert.equal(await codeOf(service.createGroup({ ...ctx }, { namePart: 'neu' })), 'ORG_API_NOT_CONFIGURED');
-  assert.equal(await codeOf(service.addMembers({ ...ctx }, { groupId: 'g-admins', accountIds: [ANNA] })), 'ORG_API_NOT_CONFIGURED');
-  assert.equal(await codeOf(service.removeMembers({ ...ctx }, { groupId: 'g-admins', accountIds: [ANNA] })), 'ORG_API_NOT_CONFIGURED');
+  assert.equal((await service.createGroup({ ...ctx }, { namePart: 'neu' })).pending, true);
+  assert.equal((await service.addMembers({ ...ctx }, { groupId: 'g-admins', accountIds: [ANNA] })).results[0].status, 'pending');
+  const removing = seed.jira.groups['g-admins'].members.find((m) => m !== 'u-me');
+  assert.equal((await service.removeMembers({ ...ctx }, { groupId: 'g-admins', accountIds: [removing] })).results[0].status, 'pending');
   assert.ok(!seed.jira.groups['g-admins'].members.includes(ANNA));
-  assert.equal(audit._rows().filter((r) => r.action !== 'PROJECT_KEY_CHANGED').length, 0);
+  assert.ok(seed.jira.groups['g-admins'].members.includes(removing));
+  assert.ok(!Object.values(seed.jira.groups).some((g) => g.name === 'atlassian-PROJ-neu'));
+  assert.deepEqual([...new Set(audit._rows().filter((r) => r.action !== 'PROJECT_KEY_CHANGED').map((r) => r.action))], ['CHANGE_REQUESTED']);
 });

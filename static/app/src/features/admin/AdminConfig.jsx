@@ -1,5 +1,6 @@
 /**
- * Configuration tab of the Jira admin page: organization connection, project scope, block list, IdP read-only
+ * Configuration tab of the Jira admin page: how group changes are made (Jira admins or the optional organization
+ * connection), the TEST ONLY switch (development environment only), organization connection, project scope, block list, IdP read-only
  * groups, auditor groups, member view, time limits, AI features (Rovo agent), requests, reviews, automation and scope guard, saved together
  * and undoable.
  *
@@ -8,7 +9,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-16
+ * @updated     2026-11-19
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -81,15 +82,113 @@ function Chips({ items, render = (x) => x, onRemove, removeLabel, keyOf = (x) =>
   );
 }
 
-// Group writes always run through the Atlassian Organization API (Atlassian does
-// not let apps create groups through the Jira REST API). Every site connects its
-// own organization here; the key is stored encrypted for this installation only
-// and never comes back to the browser.
-function OrgConnectionSection({ initialStatus }) {
+// "How group changes are made": Jira admins apply changes with their own rights (recommended, no organization key),
+// or the optional organization connection applies every change. Shows what is really in effect.
+function ChangeModeSection({ value, current, onChange, orgConfigured, waiting, onOpenQueue }) {
+  const { t } = useI18n();
+  // What applies right now: the saved setting (not the unsaved draft), and organization mode only while connected.
+  const effective = current === 'org' && orgConfigured ? 'org' : 'jiraAdmin';
+  return (
+    <Section id="sec-mode" title={t('config.mode')} hint={t('config.modeHint')} delay={0.06}>
+      <fieldset className="radio-group">
+        <legend className="sr-only">{t('config.mode')}</legend>
+        <RadioCard name="mode" id="mode-jira" layoutGroup="mode" checked={value !== 'org'} onSelect={() => onChange('jiraAdmin')}>
+          <span className="grow stack-4">
+            <label htmlFor="mode-jira">{t('config.modeJiraAdmin')}</label>
+            <span className="muted small">{t('config.modeJiraAdminHint')}</span>
+          </span>
+        </RadioCard>
+        <RadioCard name="mode" id="mode-org" layoutGroup="mode" checked={value === 'org'} onSelect={() => onChange('org')}>
+          <span className="grow stack-4">
+            <label htmlFor="mode-org">{t('config.modeOrg')}</label>
+            <span className="muted small">{t('config.modeOrgHint')}</span>
+          </span>
+        </RadioCard>
+      </fieldset>
+      <AnimatePresence initial={false}>
+        {value === 'org' && !orgConfigured && (
+          <motion.p className="notice notice-warn" role="status" {...collapse}>
+            <Icon name="alert" size={16} />
+            <span>{t('config.modeOrgMissing')}</span>
+          </motion.p>
+        )}
+      </AnimatePresence>
+      <div className="row-between wrap mode-now">
+        <span className="small">
+          <span className="org-status-light inline" data-mode={effective} aria-hidden="true" />
+          {t('config.modeNow', { mode: t(effective === 'org' ? 'config.modeNowOrg' : 'config.modeNowJiraAdmin') })}
+          {waiting > 0 ? ` · ${t('config.modeWaiting', { count: waiting })}` : ''}
+        </span>
+        {waiting > 0 && (
+          <Button size="sm" icon="arrowRight" onClick={onOpenQueue}>
+            {t('config.modeOpenQueue')}
+          </Button>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+// TEST ONLY (Forge development environment only; the server ignores the list everywhere else and never sends it):
+// accounts treated as project admins on project pages and in Rovo, to test the project-admin flow with one account.
+function TestProjectAdminsSection({ accounts, onChange, me }) {
+  const { t } = useI18n();
+  const [value, setValue] = useState('');
+  const add = (id) => {
+    const v = String(id ?? '').trim();
+    if (v && !accounts.includes(v)) onChange([...accounts, v]);
+    setValue('');
+  };
+  return (
+    <motion.section aria-labelledby="sec-test" className="card section test-only" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.45, ease, delay: 0.07 } }}>
+      <div className="stack-4">
+        <h2 id="sec-test" className="h3 test-only-title">
+          <Icon name="alert" size={18} />
+          {t('config.test')}
+        </h2>
+        <p className="muted small">{t('config.testHint')}</p>
+      </div>
+      {accounts.length ? (
+        <Chips items={accounts} render={(id) => (id === me ? t('config.testMe', { id }) : id)} onRemove={(id) => onChange(accounts.filter((x) => x !== id))} removeLabel={(id) => t('config.testRemove', { name: id })} />
+      ) : (
+        <p className="muted small">{t('config.testEmpty')}</p>
+      )}
+      <form
+        className="row-8 wrap"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add(value);
+        }}
+      >
+        <label htmlFor="test-account" className="sr-only">
+          {t('config.testLabel')}
+        </label>
+        <input id="test-account" className="input grow" placeholder={t('config.testLabel')} value={value} spellCheck={false} autoComplete="off" onChange={(e) => setValue(e.target.value)} />
+        <Button type="submit" size="sm" disabled={!value.trim()}>
+          {t('config.testAdd')}
+        </Button>
+        {me && !accounts.includes(me) && (
+          <Button size="sm" variant="ghost" onClick={() => add(me)}>
+            {t('config.testAddMe')}
+          </Button>
+        )}
+      </form>
+    </motion.section>
+  );
+}
+
+// Optional since Jira-admin mode: the organization connection lets project admins' changes apply at once and runs
+// automatic removals. Every site connects its own organization here; the key is stored encrypted for this
+// installation only and never comes back to the browser.
+function OrgConnectionSection({ initialStatus, onStatus, used = true }) {
   const { t, fmt } = useI18n();
   const notify = useNotify();
-  const [conn, setConn] = useState(initialStatus ?? { configured: false });
-  const [editing, setEditing] = useState(!initialStatus?.configured);
+  const [conn, setConnState] = useState(initialStatus ?? { configured: false });
+  const setConn = (next) => {
+    setConnState(next);
+    onStatus?.(next);
+  };
+  const [editing, setEditing] = useState(false);
   const [orgId, setOrgId] = useState(initialStatus?.orgId ?? '');
   const [apiKey, setApiKey] = useState('');
   const [directories, setDirectories] = useState(null);
@@ -155,7 +254,7 @@ function OrgConnectionSection({ initialStatus }) {
     try {
       setConn(await call('removeOrgConnection'));
       setConfirmRemove(false);
-      setEditing(true);
+      setEditing(false);
       setResult(null);
       notify({ type: 'info', title: t('config.orgRemoved') });
     } catch (err) {
@@ -188,6 +287,21 @@ function OrgConnectionSection({ initialStatus }) {
           </Button>
         )}
       </div>
+
+      {!conn.configured && !editing && (
+        <div className="org-actions">
+          <Button size="sm" icon="key" onClick={() => setEditing(true)}>
+            {t('config.orgConnect')}
+          </Button>
+        </div>
+      )}
+
+      {conn.configured && !used && (
+        <p className="notice small">
+          <Icon name="info" size={16} />
+          <span>{t('config.orgUnused')}</span>
+        </p>
+      )}
 
       {conn.configured && !editing && (
         <div className="subsection org-details">
@@ -261,7 +375,7 @@ function OrgConnectionSection({ initialStatus }) {
                 <Button type="submit" variant="primary" loading={saving}>
                   {t('config.orgSave')}
                 </Button>
-                {conn.configured && <Button onClick={closeForm}>{t('config.orgCancel')}</Button>}
+                <Button onClick={closeForm}>{t('config.orgCancel')}</Button>
               </div>
             </form>
           </motion.div>
@@ -294,9 +408,10 @@ function LockedChips({ items }) {
 
 const addUnique = (list, v) => (list.some((x) => x.toLowerCase() === v.toLowerCase()) ? list : [...list, v]);
 
-export function AdminConfig({ initial, onSaved }) {
+export function AdminConfig({ initial, onSaved, waiting = 0, onOpenQueue }) {
   const { t } = useI18n();
   const notify = useNotify();
+  const [orgConfigured, setOrgConfigured] = useState(Boolean(initial.orgApi?.configured));
   const [saved, setSaved] = useState(initial.config);
   const [draft, setDraft] = useState(initial.config);
   const [months, setMonths] = useState(String(initial.config.retentionMonths ?? 24));
@@ -400,7 +515,11 @@ export function AdminConfig({ initial, onSaved }) {
         <p className="muted small">{t('config.namingNote')}</p>
       </Section>
 
-      <OrgConnectionSection initialStatus={initial.orgApi} />
+      <ChangeModeSection value={draft.groupChanges} current={saved.groupChanges} onChange={(v) => update({ groupChanges: v })} orgConfigured={orgConfigured} waiting={waiting} onOpenQueue={onOpenQueue} />
+
+      {initial.development && <TestProjectAdminsSection accounts={draft.testProjectAdmins ?? []} onChange={(v) => update({ testProjectAdmins: v })} me={initial.user?.accountId} />}
+
+      <OrgConnectionSection initialStatus={initial.orgApi} onStatus={(st) => setOrgConfigured(Boolean(st?.configured))} used={saved.groupChanges === 'org'} />
 
       <Section id="sec-roles" title={t('config.roles')} hint={t('config.rolesHint')} delay={0.09}>
         <div className="stack-4">

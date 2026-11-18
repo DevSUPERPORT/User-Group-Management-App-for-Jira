@@ -35,7 +35,7 @@ const keyOf = (groupId, accountId) => `${groupId}|${accountId}`;
 // Clicks only stage changes; nothing happens until the review is confirmed. One
 // person joining or leaving the team becomes one batch instead of a visit to
 // every group, and the whole batch can be undone.
-export function PeoplePanel({ onCountsChange, onOpenGroup }) {
+export function PeoplePanel({ onCountsChange, onOpenGroup, pendingWrites = false }) {
   const { t, fmt } = useI18n();
   const notify = useNotify();
   const [data, setData] = useState(null);
@@ -235,6 +235,8 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
     const ok = res.results.filter((r) => r.status === 'added' || r.status === 'removed');
     const already = res.results.filter((r) => r.status === 'already');
     const bad = res.results.filter((r) => r.status === 'failed');
+    // Jira-admin mode, project admin: these wait for a Jira admin (nothing changed in Jira yet).
+    const waiting = res.results.filter((r) => r.status === 'pending' || r.status === 'withdrawn');
     // Jira's member count lags behind Organization API changes; the counts follow
     // the changes just made instead (as in the group view).
     const counts = {};
@@ -269,6 +271,7 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
     } else if (bad.length) {
       notify({ type: 'error', title: t('people.allFailed', { count: bad.length }) });
     }
+    if (waiting.length) notify({ type: 'info', title: t('people.pending', { count: waiting.length }), description: t('notify.pendingHint') });
     return res;
   };
 
@@ -317,7 +320,7 @@ export function PeoplePanel({ onCountsChange, onOpenGroup }) {
           <h2 id="people-title" className="h3">
             {t('people.title')}
           </h2>
-          <p className="muted small">{t('people.hint')}</p>
+          <p className="muted small">{t(pendingWrites ? 'people.hintJiraAdmin' : 'people.hint')}</p>
         </div>
         <PersonSearch
           disabled={!data}
@@ -755,7 +758,7 @@ function ApplyDialog({ changes, personById, groupById, expiryEnabled, onClose, o
 
         <div className="notice">
           <Icon name="undo" size={16} />
-          <span>{t('people.undoHint')}</span>
+          <span>{t(pendingWrites ? 'people.undoHintJiraAdmin' : 'people.undoHint')}</span>
         </div>
 
         <div className="actions">

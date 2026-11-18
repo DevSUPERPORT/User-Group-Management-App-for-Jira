@@ -8,7 +8,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import { AppError, ErrorCodes } from '../core/errors.js';
@@ -267,6 +267,69 @@ export function memoryOrg(state, { configured = true } = {}) {
     async getGroupMeta(groupId) {
       const synced = (state.idpGroups ?? []).includes(groupId);
       return { externalSynced: synced, managedBy: synced ? 'scim' : null, modifiable: !synced };
+    },
+  };
+}
+
+/**
+ * Fake Jira REST writes made as the signed-in user (asUser), over the same state as memoryJira (Jira-admin mode).
+ * Like Jira: only Jira admins may write (403 "Administrator privileges are required" otherwise). `needsConsent`
+ * lists accounts that have not allowed the app to act for them yet: their calls fail like Forge's
+ * NeedsAuthenticationError (wrapped as USER_CONSENT_REQUIRED by src/forge/jiraUserWriter.js).
+ */
+export function memoryJiraUser(state, { needsConsent = [] } = {}) {
+  const s = state;
+  const calls = [];
+  const consent = new Set(needsConsent);
+  let seq = 5000;
+  const consentCheck = (as) => {
+    if (consent.has(as?.accountId)) {
+      const cause = Object.assign(new Error('Authentication Required'), { name: 'NEEDS_AUTHENTICATION_ERR', status: 401 });
+      const err = new AppError(ErrorCodes.USER_CONSENT_REQUIRED, 'Allow the app to act on your behalf first (Grant access); nothing was changed.', { reason: 'CONSENT' });
+      err.cause = cause;
+      throw err;
+    }
+  };
+  const check = (as) => {
+    consentCheck(as);
+    if (!s.perms?.[as?.accountId]?.jiraAdmin) throw new AppError(ErrorCodes.JIRA_ADMIN_REQUIRED, 'Only Jira administrators can apply changes', { status: 403, jira: 'Administrator privileges are required' });
+  };
+  const group = (groupId) => {
+    const g = s.groups[groupId];
+    if (!g) throw new AppError(ErrorCodes.GROUP_NOT_FOUND, 'Group not found');
+    return g;
+  };
+  return {
+    calls,
+    grantConsent(accountId) {
+      consent.delete(accountId);
+    },
+    async createGroup(name, as) {
+      check(as);
+      calls.push(['createGroup', name, as?.accountId]);
+      if (Object.values(s.groups).some((g) => g.name.toLowerCase() === name.toLowerCase())) throw new AppError('GROUP_EXISTS', 'A group with that name already exists.');
+      const groupId = `gu-${(seq++).toString(16)}`;
+      s.groups[groupId] = { groupId, name, members: [] };
+      return { groupId, name };
+    },
+    async addMember(groupId, accountId, as) {
+      check(as);
+      calls.push(['addMember', groupId, accountId, as?.accountId]);
+      const g = group(groupId);
+      if ((s.idpGroups ?? []).includes(groupId)) throw new AppError(ErrorCodes.GROUP_READ_ONLY, 'Group is managed by identity provider');
+      if (g.members.includes(accountId)) throw new AppError('ALREADY_MEMBER', 'User is already a member');
+      g.members.push(accountId);
+    },
+    async removeMember(groupId, accountId, as) {
+      check(as);
+      calls.push(['removeMember', groupId, accountId, as?.accountId]);
+      const g = group(groupId);
+      if (!g.members.includes(accountId)) throw new AppError('NOT_MEMBER', 'User is not a member of the group');
+      g.members = g.members.filter((m) => m !== accountId);
+    },
+    async requestConsent(as) {
+      if (consent.has(as?.accountId)) throw Object.assign(new Error('Authentication Required'), { name: 'NEEDS_AUTHENTICATION_ERR', status: 401 });
+      return { ok: true, status: 200 };
     },
   };
 }

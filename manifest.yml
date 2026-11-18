@@ -6,7 +6,7 @@
 # @author      George Papasotiriou
 # @company     SUPERPORT
 # @created     2026-10-26
-# @updated     2026-11-05
+# @updated     2026-11-19
 
 modules:
   # UC-01 .. UC-06: "Group Self-Service for Jira" entry in the project settings, where project admins
@@ -77,6 +77,9 @@ modules:
         - If an addition fails with GROUP_USED_ELSEWHERE, explain that the group also grants access in the listed other projects,
           so only a Jira admin can add people to it; project admins only manage access within their own project.
         - When the user says they made a mistake, offer "undo the last change".
+        - If an action answers with waitingForJiraAdmin: true, say clearly that nothing has changed in Jira yet: the change waits
+          for a Jira administrator, who applies it in the app; the user can withdraw it there (or with "undo the last change").
+          Never describe such a change as done.
         Answer in the user's language (German or English), short and clear, using lists for several items.
       conversationStarters:
         - Which groups exist in my project and who is in them?
@@ -563,7 +566,8 @@ permissions:
   content:
     styles:
       - unsafe-inline
-  # Group writes go through the Atlassian Organization Admin API (ORG_ID / ORG_API_KEY).
+  # Optional organization connection ("Organization connection applies changes"): group writes through the Atlassian
+  # Organization Admin API. Jira-admin mode needs no egress (Jira REST asUser via requestJira).
   external:
     fetch:
       backend:

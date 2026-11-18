@@ -1,13 +1,14 @@
 /**
  * Project admin view of access requests from "My groups": approve (adds the person with the requested end date) or
- * deny with a note, every decision undoable. Also exports splitGroupName.
+ * deny with a note, every decision undoable. In Jira-admin mode a project admin's approval waits for a Jira admin
+ * ("Approved – waiting for a Jira admin") until it is applied. Also exports splitGroupName.
  *
  * @file        static/app/src/features/requests/RequestsPanel.jsx
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -19,6 +20,7 @@ import { Avatar, Button, GroupName, Pill, Skeleton } from '../../components/prim
 import { useNotify } from '../../components/Toaster.jsx';
 import { collapse, ease, spring } from '../../motion.js';
 import { errorText } from '../errors.js';
+import { consentAction } from '../changes/consent.js';
 
 export function splitGroupName(name) {
   const m = /^(atlassian-[^-]+-)(.+)$/.exec(name ?? '');
@@ -28,7 +30,7 @@ export function splitGroupName(name) {
 // Access requests of project members (from "My groups"). A project admin approves
 // (the person is added, with the requested end date) or denies, each with an
 // optional note; every decision can be undone.
-export function RequestsPanel({ onPendingChange, onMembershipChange }) {
+export function RequestsPanel({ onPendingChange, onMembershipChange, pendingWrites = false }) {
   const { t, fmt } = useI18n();
   const notify = useNotify();
   const [requests, setRequests] = useState(null);
@@ -77,15 +79,16 @@ export function RequestsPanel({ onPendingChange, onMembershipChange }) {
       replace(res.request);
       setDeciding(null);
       setNote('');
-      if (decision === 'approve') onMembershipChange?.(request.groupId, 1);
+      const waiting = res.request.status === 'waiting';
+      if (decision === 'approve' && !waiting) onMembershipChange?.(request.groupId, 1);
       notify({
-        type: 'success',
-        title: t(decision === 'approve' ? 'requests.approved' : 'requests.denied', { name: request.displayName }),
-        description: decision === 'approve' && res.member?.expiresAt ? t('members.until', { date: fmt.date(res.member.expiresAt) }) : undefined,
+        type: waiting ? 'info' : 'success',
+        title: waiting ? t('requests.approvedWaiting', { name: request.displayName }) : t(decision === 'approve' ? 'requests.approved' : 'requests.denied', { name: request.displayName }),
+        description: waiting ? t('notify.pendingHint') : decision === 'approve' && res.member?.expiresAt ? t('members.until', { date: fmt.date(res.member.expiresAt) }) : undefined,
         action: { label: t('notify.undo'), onClick: () => reopen(res.request) },
       });
     } catch (err) {
-      notify({ type: 'error', title: errorText(t, err) });
+      notify({ type: 'error', title: errorText(t, err), action: consentAction(t, notify, err) });
       load();
     } finally {
       setBusy(null);
@@ -113,7 +116,7 @@ export function RequestsPanel({ onPendingChange, onMembershipChange }) {
               {t('requests.pendingTitle')}
               {requests && pending.length > 0 && <span className="count-badge">{pending.length}</span>}
             </h2>
-            <p className="muted small">{t('requests.pendingHint')}</p>
+            <p className="muted small">{t(pendingWrites ? 'requests.pendingHintJiraAdmin' : 'requests.pendingHint')}</p>
           </div>
         </div>
 
@@ -189,7 +192,7 @@ export function RequestsPanel({ onPendingChange, onMembershipChange }) {
                                   {t('members.cancel')}
                                 </Button>
                                 <Button size="sm" variant={deciding.decision === 'approve' ? 'dark' : 'danger'} loading={busy === r.id} onClick={() => decide(r, deciding.decision)}>
-                                  {t(deciding.decision === 'approve' ? 'requests.confirmApprove' : 'requests.confirmDeny')}
+                                  {t(deciding.decision === 'approve' ? (pendingWrites ? 'requests.confirmApprovePending' : 'requests.confirmApprove') : 'requests.confirmDeny')}
                                 </Button>
                               </div>
                             </div>
@@ -238,10 +241,11 @@ export function RequestsPanel({ onPendingChange, onMembershipChange }) {
                       <span className="muted small">
                         {' · '}
                         {r.decidedBy ? t('requests.decidedBy', { name: r.decidedBy, date: fmt.date(r.decidedAt) }) : fmt.date(r.decidedAt ?? r.createdAt)}
+                        {r.rejectedByJiraAdmin ? ` · ${t('requests.rejectedByJiraAdmin')}` : ''}
                         {r.note ? ` · “${r.note}”` : ''}
                       </span>
                     </span>
-                    {(r.status === 'approved' || r.status === 'denied') && (
+                    {(r.status === 'approved' || r.status === 'denied' || r.status === 'waiting') && (
                       <Button size="sm" variant="ghost" icon="undo" loading={busy === r.id} onClick={() => reopen(r)}>
                         {t('requests.reopen')}
                       </Button>

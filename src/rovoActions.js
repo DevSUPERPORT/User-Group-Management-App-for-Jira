@@ -13,13 +13,16 @@
  *   are all enforced there.
  * - Changes are marked "via Rovo" in the audit log (see rovo.js) and are kept small
  *   per call (max. 10 additions / 5 removals) so a misunderstanding cannot do much harm.
+ * - Jira-admin mode: a Jira admin's change applies at once (Jira REST as that user); a project admin's change waits
+ *   for a Jira admin, and the answer says so (WAITING_MESSAGE) instead of claiming it is done. If the user has not
+ *   allowed the app to act on their behalf yet, Forge's own authentication error is passed on so Rovo can ask.
  *
  * @file        src/rovoActions.js
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-16
+ * @updated     2026-11-19
  */
 
 import { AppError, ErrorCodes } from './core/errors.js';
@@ -31,6 +34,10 @@ export { AI_STOPPED_MESSAGE };
 // Names the exact place, so the user can pass it on to a Jira admin.
 export const AI_DISABLED_MESSAGE =
   'AI features of this app are turned off. A Jira administrator can turn them on in the app configuration: Jira settings → Apps → Group Self-Service for Jira → Configuration → "AI features (Rovo agent)".';
+
+// What the agent tells a project admin whose change now waits for a Jira admin (Jira-admin mode).
+export const WAITING_MESSAGE =
+  'Nothing has changed in Jira yet: this change is waiting for a Jira administrator, who applies it in the app (project settings → Apps → Group Self-Service for Jira, or the app\'s admin page). You can withdraw it there while it waits.';
 
 export const MAX_ADD = 10;
 export const MAX_REMOVE = 5;
@@ -68,7 +75,7 @@ export function accountIdOf(payload, context) {
   return payload?.context?.accountId ?? context?.principal?.accountId ?? payload?.context?.principal?.accountId ?? context?.accountId ?? null;
 }
 
-export function createRovoActions(service, { now = () => Date.now(), env = globalThis.process?.env ?? {} } = {}) {
+export function createRovoActions(service, { now = () => Date.now(), env = globalThis.process?.env ?? {}, environmentType = (context) => context?.environmentType ?? null } = {}) {
   // Wraps an action: passes the kill switch first (APP_MAINTENANCE, see
   // core/maintenance.js), then SUPERPORT's AI stop (AI_BUDGET, see core/aiBudget.js), then the AI switch (off unless
   // a Jira admin turned it on), resolves the caller and project, and turns errors into a
@@ -83,9 +90,13 @@ export function createRovoActions(service, { now = () => Date.now(), env = globa
       const accountId = accountIdOf(payload, context);
       if (!accountId) return { ok: false, error: 'Could not identify the calling user; nothing was done.', nothingChanged: true };
       const project = payload?.projectKey ? await service.resolveProjectKey(payload.projectKey) : null;
-      const ctx = { accountId, projectId: project?.id ?? null, surface: 'project', license: context?.license ?? null };
+      // via: the service marks pending changes "via Rovo"; environmentType: only the development-only test switch reads it.
+      const ctx = { accountId, projectId: project?.id ?? null, surface: 'project', license: context?.license ?? null, via: 'rovo', environmentType: environmentType(context) };
       return { ok: true, ...(await fn({ payload: payload ?? {}, ctx, project })) };
     } catch (err) {
+      // No consent yet for writes as this user: Forge's own error goes back to the platform so Rovo can ask for it.
+      if (err?.name === 'NEEDS_AUTHENTICATION_ERR') throw err;
+      if (err?.cause?.name === 'NEEDS_AUTHENTICATION_ERR') throw err.cause;
       console.warn('Rovo action failed', err?.code, err?.message);
       return { ok: false, error: err?.message ?? String(err), code: err?.details?.reason ?? err?.code ?? 'ERROR', nothingChanged: true };
     }
@@ -103,6 +114,9 @@ export function createRovoActions(service, { now = () => Date.now(), env = globa
   }
 
   const editable = (g) => !g.readOnly && g.available !== false;
+  // Statuses as the agent reports them; "pending" never sounds like "done".
+  const statusText = (status) => (status === 'pending' ? 'waiting for a Jira administrator' : status === 'withdrawn' ? 'withdrawn (it was still waiting)' : status);
+  const waitingNote = (results) => (results.some((r) => r.status === 'pending') ? { waitingForJiraAdmin: true, note: WAITING_MESSAGE } : {});
 
   // Runs a list of changes (or only previews it) and reports per person and group.
   async function runChanges(ctx, matrix, changes, { confirm, expiresAt = null, note = '', reason = 'bulk', expiries = {} }) {
@@ -112,9 +126,11 @@ export function createRovoActions(service, { now = () => Date.now(), env = globa
     if (!confirm) return { preview: true, nothingChanged: true, planned, next: 'Show this list to the user and call the action again with confirm: true once they agree.' };
     if (!changes.length) return { planned, results: [], note: 'Nothing to change.' };
     const res = await service.applyAccessChanges(ctx, { changes, expiresAt, note, reason, expiries });
+    const waiting = res.results.some((r) => r.status === 'pending');
     return {
-      results: res.results.map((r) => ({ person: personName(r.accountId), group: r.groupName, change: r.op, status: r.status, why: r.status === 'failed' ? r.error : undefined })),
-      undo: 'Ask me to undo the last change, or use Undo in the app (People tab).',
+      results: res.results.map((r) => ({ person: personName(r.accountId), group: r.groupName, change: r.op, status: statusText(r.status), why: r.status === 'failed' ? r.error : undefined })),
+      ...(waiting ? { waitingForJiraAdmin: true, note: WAITING_MESSAGE } : {}),
+      undo: waiting ? 'Ask me to undo the last change to withdraw what is still waiting, or withdraw it in the app.' : 'Ask me to undo the last change, or use Undo in the app (People tab).',
     };
   }
 
@@ -203,6 +219,7 @@ export function createRovoActions(service, { now = () => Date.now(), env = globa
 
   const createGroup = action(async ({ payload, ctx }) => {
     const g = await service.createGroup(ctx, { namePart: String(payload.namePart ?? '').trim().toLowerCase(), description: payload.description ?? '', addMe: payload.addMe === true });
+    if (g.pending) return { requested: g.name, created: null, waitingForJiraAdmin: true, note: WAITING_MESSAGE };
     return { created: g.name, membersAdded: g.memberCount, note: g.addMeError ? 'The group was created, but you could not be added as a member.' : null };
   });
 
@@ -218,11 +235,14 @@ export function createRovoActions(service, { now = () => Date.now(), env = globa
     let results = [];
     if (matched.length) {
       const res = await service.addMembers(ctx, { groupId: g.groupId, accountIds: matched.map((r) => r.user.accountId), expiresAt });
-      results = res.results.map((r) => ({ person: r.displayName, status: r.status, until: isoDate(r.expiresAt) }));
+      results = res.results.map((r) => ({ person: r.displayName, status: statusText(r.status), until: isoDate(r.expiresAt), _status: r.status }));
     }
+    const waiting = waitingNote(results.map((r) => ({ status: r._status })));
+    results = results.map(({ _status, ...r }) => r);
     return {
       group: g.name,
       results,
+      ...waiting,
       notAdded: unclear.map((r) => ({ input: r.input, why: r.status === 'ambiguous' ? `several people match: ${r.candidates.map((c) => c.displayName).join(', ')}` : 'nobody found' })),
     };
   });
@@ -244,9 +264,10 @@ export function createRovoActions(service, { now = () => Date.now(), env = globa
     let results = [];
     if (picks.length) {
       const res = await service.removeMembers(ctx, { groupId: g.groupId, accountIds: picks.map((p) => p.accountId), reason: 'review', note: payload.note || 'via Rovo' });
-      results = res.results.map((r) => ({ person: r.displayName, status: r.status }));
+      results = res.results.map((r) => ({ person: r.displayName, status: statusText(r.status), _status: r.status }));
     }
-    return { group: g.name, results, notRemoved: unclear, undo: 'Ask me to add them again, or use Undo in the app.' };
+    const waiting = waitingNote(results.map((r) => ({ status: r._status })));
+    return { group: g.name, results: results.map(({ _status, ...r }) => r), notRemoved: unclear, ...waiting, undo: 'Ask me to add them again, or use Undo in the app.' };
   });
 
   const setEndDate = action(async ({ payload, ctx }) => {
@@ -272,7 +293,8 @@ export function createRovoActions(service, { now = () => Date.now(), env = globa
     const hits = pending.filter((r) => fold(r.displayName) === fold(payload.person) && (!group || fold(r.groupName) === group || fold(r.groupName).endsWith(`-${group}`)));
     if (hits.length !== 1) throw new AppError(ErrorCodes.BAD_REQUEST, hits.length ? 'Several pending requests match; name the group too.' : 'No pending request matches.');
     const res = await service.decideRequest(ctx, { requestId: hits[0].id, decision, note: payload.note ?? '' });
-    return { request: { group: res.request.groupName, person: res.request.displayName, status: res.request.status } };
+    const waiting = res.request.status === 'waiting';
+    return { request: { group: res.request.groupName, person: res.request.displayName, status: waiting ? 'approved, waiting for a Jira administrator' : res.request.status }, ...(waiting ? { waitingForJiraAdmin: true, note: WAITING_MESSAGE } : {}) };
   });
 
   // ---------------------------------------------------------------- people across groups
@@ -333,6 +355,19 @@ export function createRovoActions(service, { now = () => Date.now(), env = globa
   // last burst within the past hour), restoring end dates of removed people.
   const undoLastChange = action(async ({ payload, ctx }) => {
     const res = await service.queryAudit(ctx, { filters: { from: now() - UNDO_WINDOW }, pageSize: 100 });
+    // Jira-admin mode: if the caller's latest step only asked for changes that still wait, undo withdraws them.
+    const requested = res.entries.filter((e) => e.actorAccountId === ctx.accountId && (e.action === 'CHANGE_REQUESTED' || e.action === 'MEMBER_ADDED' || e.action === 'MEMBER_REMOVED'));
+    const lastStep = requested.length ? Math.max(...requested.map((e) => e.createdAt)) : null;
+    const waitingStep = requested.filter((e) => e.action === 'CHANGE_REQUESTED' && e.createdAt >= lastStep - BURST && e.details?.changeRef);
+    if (waitingStep.length && waitingStep.length === requested.filter((e) => e.createdAt >= lastStep - BURST).length) {
+      const open = new Map((await service.listChanges(ctx, { status: 'pending' })).changes.map((c) => [c.ref, c]));
+      const refs = [...new Set(waitingStep.map((e) => e.details.changeRef))].filter((r) => open.has(r));
+      const planned = refs.map((r) => ({ change: open.get(r).type, group: open.get(r).groupName, person: open.get(r).displayName, status: 'waiting for a Jira administrator' }));
+      if (!refs.length) return { nothingChanged: true, note: 'Your last changes are no longer waiting (a Jira administrator already applied or rejected them).' };
+      if (!confirmed(payload)) return { preview: true, nothingChanged: true, withdrawing: planned, next: 'Show this list to the user and call the action again with confirm: true once they agree.' };
+      const out = await service.withdrawChanges(ctx, { refs });
+      return { withdrawn: out.results.filter((r) => r.status === 'withdrawn').length, results: planned.map((p, i) => ({ ...p, status: out.results[i].status })) };
+    }
     const mine = res.entries.filter((e) => e.actorAccountId === ctx.accountId && (e.action === 'MEMBER_ADDED' || e.action === 'MEMBER_REMOVED') && e.details?.reason !== 'undo' && e.groupId && e.targetAccountId);
     if (!mine.length) return { nothingChanged: true, note: 'You made no membership changes in this project during the last hour.' };
     const latest = Math.max(...mine.map((e) => e.createdAt));

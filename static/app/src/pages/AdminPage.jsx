@@ -1,13 +1,14 @@
 /**
  * Jira admin page (jira:adminPage): loads adminBootstrap and shows the configuration tab (settings, compliance,
- * organization connection, data transfer) and the audit log of all projects.
+ * how group changes are made, organization connection, data transfer), the changes that wait for a Jira admin
+ * (Jira-admin mode, with a count on the tab and in the header) and the audit log of all projects.
  *
  * @file        static/app/src/pages/AdminPage.jsx
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -16,9 +17,11 @@ import { call } from '../api/client.js';
 import { useI18n } from '../i18n/index.jsx';
 import { Footer, Header, Tabs } from '../components/Shell.jsx';
 import { Pill, Skeleton } from '../components/primitives.jsx';
+import { Icon } from '../components/Icon.jsx';
 import { AdminConfig } from '../features/admin/AdminConfig.jsx';
 import { AuditLog } from '../features/audit/AuditLog.jsx';
 import { DataTransfer } from '../features/admin/DataTransfer.jsx';
+import { ChangeQueue } from '../features/changes/ChangeQueue.jsx';
 import { StateScreen } from './StateScreens.jsx';
 import { ease } from '../motion.js';
 import { Tour, TutorialButton, useTutorial } from '../features/tutorial/Tour.jsx';
@@ -31,11 +34,18 @@ export function AdminPage() {
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('config');
   const [version, setVersion] = useState(0);
+  // Changes waiting for a Jira admin (Jira-admin mode): shown on the tab and in the header.
+  const [waiting, setWaiting] = useState(0);
   const tour = useTutorial('admin', Boolean(boot));
 
   const load = useCallback(() => {
     setError(null);
-    call('adminBootstrap').then(setBoot).catch(setError);
+    call('adminBootstrap')
+      .then((res) => {
+        setBoot(res);
+        setWaiting(res.compliance?.pendingChanges ?? 0);
+      })
+      .catch(setError);
   }, []);
   useEffect(load, [load]);
 
@@ -56,6 +66,12 @@ export function AdminPage() {
                 tour.start();
               }}
             />
+            {waiting > 0 && (
+              <button type="button" className="pill pill-warn pill-button" onClick={() => setTab('changes')}>
+                <Icon name="clock" size={14} />
+                {t('changes.waitingBadge', { count: waiting })}
+              </button>
+            )}
             <Pill icon="shield">{t('config.badge')}</Pill>
           </>
         }
@@ -66,6 +82,7 @@ export function AdminPage() {
             onChange={setTab}
             items={[
               { value: 'config', label: t('tabs.config') },
+              { value: 'changes', label: t('tabs.changes'), badge: waiting },
               { value: 'audit', label: t('tabs.auditAll') },
             ]}
           />
@@ -94,10 +111,12 @@ export function AdminPage() {
           >
             {tab === 'audit' ? (
               <AuditLog scope="admin" />
+            ) : tab === 'changes' ? (
+              <ChangeQueue scope="admin" onCountChange={setWaiting} onApplied={() => call('adminBootstrap').then(setBoot).catch(() => {})} />
             ) : boot ? (
               <div className="stack-20">
                 {/* Remounted after an import so the imported configuration is shown. */}
-                <AdminConfig key={version} initial={boot} />
+                <AdminConfig key={version} initial={boot} waiting={waiting} onOpenQueue={() => setTab('changes')} />
                 <DataTransfer
                   onImported={() =>
                     call('adminBootstrap')

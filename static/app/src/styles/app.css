@@ -3620,3 +3620,148 @@ button.compliance-card:hover:not(:disabled),
 .matrix tbody tr.is-selected .matrix-person {
   background: var(--accent-tint);
 }
+
+/* ------------------------------------------------------------------ Jira-admin mode: waiting changes */
+/* The organization connection is optional now: "not connected" is a neutral state, not an error. */
+.org-status.is-missing .org-status-light {
+  background: var(--line-strong);
+  box-shadow: none;
+}
+.mode-now {
+  padding-top: 4px;
+}
+.mode-now .org-status-light.inline {
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: 0;
+  background: #2f8a4c;
+  box-shadow: 0 0 0 4px color-mix(in srgb, #2f8a4c 18%, transparent);
+}
+.pill-button {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+.pill-button:hover {
+  background: var(--accent-bright);
+  color: var(--on-accent);
+}
+.pill-button:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+.change-card .change-check {
+  margin-top: 8px;
+}
+.change-card.is-selected {
+  background: var(--accent-tint);
+}
+.change-icon {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--text);
+}
+.change-icon.is-create {
+  background: var(--accent-tint);
+}
+.change-icon.is-remove {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+.change-what {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+}
+.change-what strong {
+  font-weight: 500;
+}
+.change-facts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.consent-notice {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.status-withdrawn {
+  background: var(--soft);
+  color: var(--muted);
+}
+.status-waiting {
+  background: var(--accent-tint);
+  color: var(--text);
+}
+.tag-waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-tint);
+  color: var(--text);
+}
+.waiting-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--accent-bright);
+  background: color-mix(in srgb, var(--accent-tint) 45%, transparent);
+}
+.waiting-box h4 {
+  margin: 0;
+}
+.waiting-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.waiting-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+}
+.waiting-row strong {
+  font-weight: 500;
+}
+.pending-groups {
+  margin-top: 12px;
+}
+.group-item.is-pending {
+  cursor: default;
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+}
+.group-item.is-pending:hover {
+  transform: none;
+}
+.group-item.is-pending .group-item-text {
+  gap: 6px;
+}
+.pending-banner,
+.test-only-banner {
+  margin-bottom: 16px;
+}
+/* TEST ONLY (development environment): a red frame nobody can mistake for a real setting. */
+.test-only {
+  border: 2px solid var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-tint);
+}
+.test-only-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--danger);
+}

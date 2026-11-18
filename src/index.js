@@ -9,7 +9,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import ResolverExport from '@forge/resolver';
@@ -18,6 +18,8 @@ import { AppError, ErrorCodes, toErrorPayload } from './core/errors.js';
 import { maintenanceMode, requireAvailable, STATUS_PAGE_URL } from './core/maintenance.js';
 import { jiraClient } from './forge/jiraClient.js';
 import { createOrgClient } from './forge/orgClient.js';
+import { isConsentError, jiraUserWriter } from './forge/jiraUserWriter.js';
+import { environmentTypeOf } from './forge/environment.js';
 import { confluenceClient } from './forge/confluenceClient.js';
 import { kvsSecrets, kvsStore } from './forge/kvsStore.js';
 import { runMigrations, sqlAudit } from './forge/sqlAudit.js';
@@ -26,7 +28,8 @@ import { runMigrations, sqlAudit } from './forge/sqlAudit.js';
 // object of @forge/resolver as the default import; the class sits on .default.
 const Resolver = ResolverExport.default ?? ResolverExport;
 
-const service = createService({ jira: jiraClient, org: createOrgClient({ secrets: kvsSecrets }), confluence: confluenceClient, store: kvsStore, audit: sqlAudit });
+// jiraUser: group writes as the signed-in Jira admin (Jira-admin mode); the service hands it only to Jira admins.
+const service = createService({ jira: jiraClient, org: createOrgClient({ secrets: kvsSecrets }), jiraUser: jiraUserWriter, confluence: confluenceClient, store: kvsStore, audit: sqlAudit });
 
 const ADMIN_MODULE = 'gum-admin-page';
 const MEMBER_MODULE = 'gum-my-groups';
@@ -51,6 +54,8 @@ function contextOf(req) {
     surface,
     license: req.context?.license ?? null,
     cloudId: req.context?.cloudId ?? null,
+    // From the Forge runtime (fallback: Forge's context). Only the development-only test switch looks at it.
+    environmentType: environmentTypeOf(req.context),
   };
 }
 
@@ -75,9 +80,17 @@ const PROJECT_FUNCTIONS = [
   'decideRequest',
   'reopenRequest',
   'completeReview',
+  // Jira-admin mode: pending changes. Applying and rejecting re-check "Jira admin" in the service.
+  'listChanges',
+  'applyChanges',
+  'rejectChanges',
+  'withdrawChanges',
 ];
 const SHARED_FUNCTIONS = ['queryAudit', 'auditFilterOptions', 'exportAudit'];
 const TUTORIAL_FUNCTIONS = ['tutorialState', 'markTutorialSeen'];
+// The admin page's queue ("Changes to apply") and the consent prompt for writes as the signed-in user.
+const CHANGE_ADMIN_FUNCTIONS = ['listChanges', 'applyChanges', 'rejectChanges'];
+const CONSENT_FUNCTIONS = ['grantAccess'];
 const MEMBER_FUNCTIONS = ['myGroups', 'requestAccess', 'withdrawRequest'];
 const AUDITOR_FUNCTIONS = ['auditorBootstrap'];
 // exportData / importData: Jira admin page only, and the service checks "Administer Jira" on every call.
@@ -109,6 +122,8 @@ const READS = new Set([
   'searchProjects',
   'testOrgApi',
   'previewDeactivatedCleanup',
+  'listChanges',
+  'grantAccess',
 ]);
 
 const resolver = new Resolver();
@@ -127,6 +142,9 @@ function define(name, allowed) {
     try {
       return { data: await service[name](ctx, req.payload ?? {}) };
     } catch (err) {
+      // "Grant access": Forge's own authentication error must reach the platform so it shows the "Allow access"
+      // prompt. Everywhere else a missing consent comes back as USER_CONSENT_REQUIRED for the UI.
+      if (name === 'grantAccess' && isConsentError(err)) throw err.name === 'NEEDS_AUTHENTICATION_ERR' ? err : err.cause;
       return toErrorPayload(err);
     }
   });
@@ -141,7 +159,9 @@ resolver.define('availability', async (req) => {
   return { data: { mode: maintenanceMode(), statusUrl: STATUS_PAGE_URL, licensed: !isLicenseInactive(req.context?.license) } };
 });
 
-PROJECT_FUNCTIONS.forEach((n) => define(n, ['project']));
+PROJECT_FUNCTIONS.filter((n) => !CHANGE_ADMIN_FUNCTIONS.includes(n)).forEach((n) => define(n, ['project']));
+CHANGE_ADMIN_FUNCTIONS.forEach((n) => define(n, ['project', 'admin']));
+CONSENT_FUNCTIONS.forEach((n) => define(n, ['project', 'admin']));
 SHARED_FUNCTIONS.forEach((n) => define(n, ['project', 'admin', 'auditor']));
 TUTORIAL_FUNCTIONS.forEach((n) => define(n, ['project', 'admin', 'auditor', 'member']));
 MEMBER_FUNCTIONS.forEach((n) => define(n, ['member']));

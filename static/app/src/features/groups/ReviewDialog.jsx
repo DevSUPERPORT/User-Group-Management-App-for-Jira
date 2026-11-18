@@ -23,7 +23,7 @@ import { errorText } from '../errors.js';
 
 // Access review: removing several people goes through this explicit review step
 // (who, what they lose, a note for the audit log, a confirmation tick).
-export function ReviewDialog({ group, people, impact, reviewActive = false, onClose, onDone, onReviewCompleted }) {
+export function ReviewDialog({ group, people, impact, reviewActive = false, pendingWrites = false, onClose, onDone, onReviewCompleted }) {
   const { t, fmt } = useI18n();
   const notify = useNotify();
   const [note, setNote] = useState('');
@@ -127,7 +127,7 @@ export function ReviewDialog({ group, people, impact, reviewActive = false, onCl
 
         <div className="notice">
           <Icon name="undo" size={16} />
-          <span>{t('review.undoHint')}</span>
+          <span>{t(pendingWrites ? 'review.pendingHint' : 'review.undoHint')}</span>
         </div>
 
         <div className="actions">

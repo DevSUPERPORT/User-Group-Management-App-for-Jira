@@ -1,13 +1,15 @@
 /**
  * Members of one group (UC-02/UC-03): paged list with search, adding people with an optional end date, removing,
- * access review and end date changes, each with undo.
+ * access review and end date changes, each with undo. In Jira-admin mode a project admin's additions and removals
+ * wait for a Jira admin: they are listed under "Waiting for a Jira administrator" (withdrawable), and members whose
+ * removal waits (or whose access ended) are marked as such.
  *
  * @file        static/app/src/features/groups/MemberSection.jsx
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -25,12 +27,14 @@ import { ReviewDialog } from './ReviewDialog.jsx';
 import { useImpact } from './useImpact.js';
 import { errorText } from '../errors.js';
 import { downloadText } from '../download.js';
+import { consentAction } from '../changes/consent.js';
+import { ChangeFacts } from '../changes/ChangeQueue.jsx';
 
 const FIRST_PAGE = 8;
 const SOON = 7 * 24 * 60 * 60 * 1000;
 
 // UC-02 (view) and UC-03 (add/remove) for one group, with undo for every change.
-export function MemberSection({ group, expiryEnabled, reviewActive = false, onCountChange, onChanged, onReviewCompleted }) {
+export function MemberSection({ group, expiryEnabled, reviewActive = false, onCountChange, onChanged, onReviewCompleted, pendingWrites = false, canApply = false, me = null, onChangesChanged }) {
   const { t, fmt } = useI18n();
   const notify = useNotify();
   const [members, setMembers] = useState([]);
@@ -53,6 +57,51 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
   const [syncing, setSyncing] = useState(false);
   const reqRef = useRef(0);
   const impact = useImpact(group.groupId);
+  // Jira-admin mode: this group's changes that wait for a Jira admin.
+  const [waiting, setWaiting] = useState([]);
+  const [waitBusy, setWaitBusy] = useState(null);
+  const waitingRemoval = useMemo(() => new Map(waiting.filter((c) => c.type === 'remove').map((c) => [c.accountId, c])), [waiting]);
+  const waitingAdds = waiting.filter((c) => c.type === 'add');
+  const waitingRemoves = waiting.filter((c) => c.type === 'remove');
+
+  const refreshWaiting = () =>
+    call('listChanges', { groupId: group.groupId })
+      .then((res) => setWaiting(res.changes))
+      .catch(() => {});
+
+  const afterWaitingChange = () => {
+    refreshWaiting();
+    onChangesChanged?.();
+  };
+
+  const withdraw = async (refs) => {
+    try {
+      const res = await call('withdrawChanges', { refs });
+      const done = res.results.filter((r) => r.status === 'withdrawn').length;
+      notify({ type: 'info', title: t('notify.withdrawnN', { count: done }) });
+    } catch (err) {
+      notify({ type: 'error', title: errorText(t, err) });
+    }
+    afterWaitingChange();
+  };
+
+  const applyWaiting = async (change) => {
+    setWaitBusy(change.ref);
+    try {
+      const res = await call('applyChanges', { refs: [change.ref] });
+      const r = res.results[0];
+      if (r?.status === 'applied') {
+        notify({ type: 'success', title: t('changes.applied', { count: 1 }) });
+        if (change.type === 'remove') applyRemoved([change.accountId], null);
+        onChanged();
+      } else notify({ type: 'error', title: errorText(t, { code: r?.code, message: r?.error, details: r?.details ?? { reason: r?.reason } }), action: res.consentRequired ? consentAction(t, notify, { code: 'USER_CONSENT_REQUIRED' }) : undefined });
+    } catch (err) {
+      notify({ type: 'error', title: errorText(t, err), action: consentAction(t, notify, err) });
+    } finally {
+      setWaitBusy(null);
+      afterWaitingChange();
+    }
+  };
 
   const fetchPage = async (startAt, maxResults, q) => call('getMembers', { groupId: group.groupId, startAt, maxResults, query: q });
 
@@ -65,6 +114,7 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
           .then((res) => {
             if (id !== reqRef.current) return;
             setMembers(res.members);
+            if (res.pendingChanges) setWaiting(res.pendingChanges);
             setSyncing(Boolean(res.syncing));
             if (res.total !== null) {
               setTotal(res.total);
@@ -150,7 +200,19 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
       const added = res.results.filter((r) => r.status === 'added');
       const already = res.results.filter((r) => r.status === 'already').length;
       const failed = res.results.filter((r) => r.status === 'failed');
+      const queued = res.results.filter((r) => r.status === 'pending');
+      const withdrawn = res.results.filter((r) => r.status === 'withdrawn');
       applyAdded(added, res.memberCount);
+      if (queued.length) {
+        notify({
+          type: 'info',
+          title: t('notify.pendingAdd', { count: queued.length }),
+          description: t('notify.pendingHint'),
+          action: { label: t('notify.withdraw'), onClick: () => withdraw(queued.map((q) => q.changeRef)) },
+        });
+      }
+      if (withdrawn.length) notify({ type: 'info', title: t('notify.withdrawnN', { count: withdrawn.length }) });
+      if (queued.length || withdrawn.length) afterWaitingChange();
       if (added.length) {
         notify({
           type: 'success',
@@ -172,7 +234,7 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
       onChanged();
       return res;
     } catch (err) {
-      notify({ type: 'error', title: errorText(t, err) });
+      notify({ type: 'error', title: errorText(t, err), action: consentAction(t, notify, err) });
       throw err;
     }
   };
@@ -182,6 +244,14 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
     try {
       const res = await call('removeMember', { groupId: group.groupId, accountId: member.accountId });
       setConfirmId(null);
+      if (res.pending) {
+        // Jira-admin mode, project admin: the person stays until a Jira admin applies the removal.
+        if (res.result?.status === 'pending') {
+          notify({ type: 'info', title: t('notify.pendingRemove', { name: member.displayName }), description: t('notify.pendingHint'), action: { label: t('notify.withdraw'), onClick: () => withdraw([res.result.changeRef]) } });
+        } else if (res.result?.status === 'withdrawn') notify({ type: 'info', title: t('notify.withdrawnN', { count: 1 }) });
+        afterWaitingChange();
+        return;
+      }
       applyRemoved([member.accountId], res.memberCount);
       const removed = [{ ...(res.removed ?? { accountId: member.accountId, previousExpiry: member.expiresAt ?? null }), displayName: member.displayName }];
       notify({
@@ -191,7 +261,7 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
       });
       onChanged();
     } catch (err) {
-      notify({ type: 'error', title: errorText(t, err), action: { label: t('notify.retry'), onClick: () => remove(member) } });
+      notify({ type: 'error', title: errorText(t, err), action: consentAction(t, notify, err, { label: t('notify.retry'), onClick: () => remove(member) }) });
     } finally {
       setRemovingId(null);
     }
@@ -222,6 +292,11 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
   const onReviewed = (res) => {
     const removed = res.results.filter((r) => r.status === 'removed');
     const failed = res.results.filter((r) => r.status === 'failed');
+    const queued = res.results.filter((r) => r.status === 'pending');
+    if (queued.length) {
+      notify({ type: 'info', title: t('notify.pendingRemoveN', { count: queued.length }), description: t('notify.pendingHint'), action: { label: t('notify.withdraw'), onClick: () => withdraw(queued.map((q) => q.changeRef)) } });
+      afterWaitingChange();
+    }
     applyRemoved(removed.map((r) => r.accountId), res.memberCount);
     setReviewOpen(false);
     setReviewMode(false);
@@ -341,6 +416,45 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
       </AnimatePresence>
 
       <AnimatePresence initial={false}>
+        {waiting.length > 0 && (
+          <motion.section className="waiting-box" aria-labelledby={`waiting-${group.groupId}`} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <h4 id={`waiting-${group.groupId}`} className="label-strong row-8">
+              <Icon name="clock" size={15} />
+              {t('pending.membersTitle')}
+              <span className="count-badge">{waiting.length}</span>
+            </h4>
+            <ul className="waiting-list">
+              {[...waitingAdds, ...waitingRemoves].map((c) => (
+                <li key={c.ref} className="waiting-row">
+                  <Avatar name={c.displayName ?? c.accountId} size={28} />
+                  <span className="grow stack-4">
+                    <span>
+                      <strong>{c.displayName ?? c.accountId}</strong> <span className="muted">{t(c.type === 'add' ? 'pending.willAdd' : 'pending.willRemove')}</span>
+                    </span>
+                    <span className="muted small">
+                      {c.requestedBy?.accountId ? t('changes.requestedBy', { name: c.requestedBy.displayName, when: fmt.relative(c.requestedAt) }) : t('changes.bySystem', { when: fmt.relative(c.requestedAt) })}
+                    </span>
+                    <ChangeFacts change={c} />
+                  </span>
+                  {canApply ? (
+                    <Button size="sm" variant="primary" icon="check" loading={waitBusy === c.ref} onClick={() => applyWaiting(c)}>
+                      {t('changes.apply')}
+                    </Button>
+                  ) : me && c.requestedBy?.accountId === me ? (
+                    <Button size="sm" variant="ghost" icon="undo" onClick={() => withdraw([c.ref])}>
+                      {t('changes.withdraw')}
+                    </Button>
+                  ) : (
+                    <span className="status-chip status-pending">{t('pending.badge')}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
         {syncing && (
           <motion.p className="notice" role="status" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <Icon name="refresh" size={16} />
@@ -370,6 +484,8 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
           <AnimatePresence initial={false}>
             {members.map((m, i) => {
               const soon = m.expiresAt && m.expiresAt - Date.now() < SOON;
+              const ended = Boolean(m.expiresAt && m.expiresAt <= Date.now());
+              const removal = waitingRemoval.get(m.accountId);
               const isSelected = selected.has(m.accountId);
               return (
                 <motion.li
@@ -408,10 +524,16 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
                           </motion.span>
                         )}
                         {!m.active && <span className="tag">{t('members.inactive')}</span>}
-                        {m.expiresAt && (
+                        {m.expiresAt && !ended && (
                           <span className={`tag tag-expiry ${soon ? 'is-soon' : ''}`} title={t('members.untilLong', { date: fmt.dateTime(m.expiresAt) })}>
                             <Icon name="clock" size={11} />
                             {t('members.until', { date: fmt.date(m.expiresAt) })}
+                          </span>
+                        )}
+                        {(ended || removal) && (
+                          <span className="tag tag-waiting" title={m.expiresAt ? t('members.untilLong', { date: fmt.dateTime(m.expiresAt) }) : undefined}>
+                            <Icon name="clock" size={11} />
+                            {ended && removal ? t('pending.ended') : ended ? t('pending.endedOnly') : t('pending.removeTag')}
                           </span>
                         )}
                       </span>
@@ -421,7 +543,7 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
                         {m.addedAt ? t('members.addedBy', { date: fmt.date(m.addedAt), name: m.addedBy }) : t('members.addedOutside')}
                       </span>
                     </span>
-                    {editable && !reviewMode && (
+                    {editable && !reviewMode && !removal && (
                       <span className="row-actions">
                         {expiryEnabled && (
                           <IconButton
@@ -462,7 +584,7 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
                           <div className="confirm-text">
                             <strong>{t('members.confirmRemove', { name: m.displayName })}</strong>
                             <span className="muted small">{impact.text}</span>
-                            <span className="muted small">{t('members.undoHint')}</span>
+                            <span className="muted small">{t(pendingWrites ? 'members.pendingRemoveHint' : 'members.undoHint')}</span>
                           </div>
                           <div className="confirm-actions">
                             <Button size="sm" onClick={() => setConfirmId(null)}>
@@ -523,7 +645,7 @@ export function MemberSection({ group, expiryEnabled, reviewActive = false, onCo
       </AnimatePresence>
 
       <AnimatePresence>
-        {reviewOpen && <ReviewDialog group={group} people={selectedPeople} impact={impact} reviewActive={reviewActive} onClose={() => setReviewOpen(false)} onDone={onReviewed} onReviewCompleted={onReviewCompleted} />}
+        {reviewOpen && <ReviewDialog group={group} pendingWrites={pendingWrites} people={selectedPeople} impact={impact} reviewActive={reviewActive} onClose={() => setReviewOpen(false)} onDone={onReviewed} onReviewCompleted={onReviewCompleted} />}
       </AnimatePresence>
       <AnimatePresence>
         {pasteOpen && (

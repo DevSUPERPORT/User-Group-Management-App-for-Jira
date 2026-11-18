@@ -11,10 +11,10 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-16
+ * @updated     2026-11-19
  */
 
-export const TUTORIAL_VERSIONS = { project: 2, member: 1, admin: 3, auditor: 1 };
+export const TUTORIAL_VERSIONS = { project: 3, member: 1, admin: 4, auditor: 1 };
 
 export const TOURS = {
   project: [
@@ -25,6 +25,8 @@ export const TOURS = {
     { id: 'members', target: '[data-tour="members"]', points: 3 },
     { id: 'people', target: '#project-tabs-people' },
     { id: 'requests', target: '#project-tabs-requests' },
+    // Jira-admin mode only (the tab exists while Jira admins apply group changes).
+    { id: 'changes', target: '#project-tabs-changes', optional: true },
     { id: 'audit', target: '#project-tabs-audit' },
     { id: 'done', target: '[data-tour="help"]', points: 2, aiPoints: [2] },
   ],
@@ -39,6 +41,7 @@ export const TOURS = {
     { id: 'welcome', points: 3 },
     { id: 'compliance', target: '[aria-labelledby="sec-compliance"]', optional: true },
     { id: 'retention', target: '[aria-labelledby="sec-retention"]' },
+    { id: 'mode', target: '[aria-labelledby="sec-mode"]' },
     { id: 'org', target: '[aria-labelledby="sec-org"]' },
     { id: 'roles', target: '[aria-labelledby="sec-roles"]', points: 3 },
     { id: 'governance', target: '[aria-labelledby="sec-governance"]', points: 3 },
@@ -46,6 +49,7 @@ export const TOURS = {
     { id: 'projects', target: '[aria-labelledby="sec-projects"]' },
     { id: 'save', target: '.save-bar' },
     { id: 'transfer', target: '[aria-labelledby="sec-transfer"]', points: 3 },
+    { id: 'queue', target: '#admin-tabs-changes' },
     { id: 'audit', target: '#admin-tabs-audit' },
     { id: 'done', target: '[data-tour="help"]' },
   ],

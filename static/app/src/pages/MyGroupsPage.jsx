@@ -54,7 +54,8 @@ export function MyGroupsPage() {
   if (error) return <StateScreen error={error} onRetry={load} />;
 
   const requests = data?.requests ?? [];
-  const pendingFor = (groupId) => requests.find((r) => r.groupId === groupId && r.status === 'pending');
+  // Open = still pending, or approved and waiting for a Jira admin (Jira-admin mode): no second request then.
+  const pendingFor = (groupId) => requests.find((r) => r.groupId === groupId && (r.status === 'pending' || r.status === 'waiting'));
 
   const withdraw = async (request) => {
     setBusy(request.id);
@@ -149,10 +150,12 @@ export function MyGroupsPage() {
                         <AnimatePresence mode="wait" initial={false}>
                           {open ? (
                             <motion.span key="pending" className="row-8" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-                              <span className="status-chip status-pending">{t('requests.status.pending')}</span>
-                              <Button size="sm" variant="ghost" loading={busy === open.id} onClick={() => withdraw(open)}>
-                                {t('my.withdraw')}
-                              </Button>
+                              <span className="status-chip status-pending">{t(`requests.status.${open.status}`)}</span>
+                              {open.status === 'pending' && (
+                                <Button size="sm" variant="ghost" loading={busy === open.id} onClick={() => withdraw(open)}>
+                                  {t('my.withdraw')}
+                                </Button>
+                              )}
                             </motion.span>
                           ) : (
                             <motion.span key="ask" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>

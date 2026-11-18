@@ -48,7 +48,7 @@ export function ComplianceCards({ compliance, confluence }) {
 
   const cards = [
     { key: 'reviews', icon: 'calendar', count: compliance.reviewsDue.length, tone: compliance.reviewsDue.length ? 'warn' : 'ok', items: compliance.reviewsDue.map((r) => ({ id: r.groupId, name: r.groupName, meta: r.projectKey })) },
-    { key: 'expiring', icon: 'clock', count: compliance.expiringSoon.length, tone: 'neutral', items: compliance.expiringSoon.map((e) => ({ id: `${e.groupId}-${e.accountId}`, name: e.projectKey ?? '', meta: fmt.date(e.expiresAt) })) },
+    { key: 'expiring', icon: 'clock', count: compliance.expiringSoon.length, tone: 'neutral', items: compliance.expiringSoon.map((e) => ({ id: `${e.groupId}-${e.accountId}`, name: e.displayName ? `${e.displayName} · ${e.groupName ?? e.projectKey ?? ''}` : e.groupName ?? e.projectKey ?? '', meta: [e.projectKey, fmt.date(e.expiresAt)].filter(Boolean).join(' · ') })) },
     { key: 'requests', icon: 'users', count: compliance.pendingRequests, tone: compliance.pendingRequests ? 'warn' : 'ok', items: [] },
   ];
   const openCard = cards.find((c) => c.key === open && c.items.length);

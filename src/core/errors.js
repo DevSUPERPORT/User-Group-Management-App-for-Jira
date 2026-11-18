@@ -9,7 +9,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 export class AppError extends Error {
@@ -39,6 +39,10 @@ export const ErrorCodes = {
   ORG_DIRECTORY_REQUIRED: 'ORG_DIRECTORY_REQUIRED',
   BAD_REQUEST: 'BAD_REQUEST',
   GROUP_USED_ELSEWHERE: 'GROUP_USED_ELSEWHERE',
+  // Jira-admin mode: Jira answered 403 to a group write made as the signed-in user (only Jira admins may).
+  JIRA_ADMIN_REQUIRED: 'JIRA_ADMIN_REQUIRED',
+  // Jira-admin mode: the signed-in user has not allowed the app to act on their behalf yet (Forge asUser consent).
+  USER_CONSENT_REQUIRED: 'USER_CONSENT_REQUIRED',
   // SUPERPORT kill switch (APP_MAINTENANCE, see maintenance.js): app down or changes paused.
   UNAVAILABLE: 'UNAVAILABLE',
 };

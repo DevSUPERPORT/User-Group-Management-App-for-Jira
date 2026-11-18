@@ -10,7 +10,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import { AppError, ErrorCodes } from './errors.js';
@@ -18,9 +18,9 @@ import { AppError, ErrorCodes } from './errors.js';
 export const EXPORT_FORMAT = 'superport-gum-export';
 export const EXPORT_VERSION = 1;
 
-// Every KVS prefix the app writes. Caches (usage:) and the Confluence index
+// Every KVS prefix the app writes (change: = pending changes of the Jira-admin mode). Caches (usage:) and the Confluence index
 // (cfidx:) are included too, so the new installation starts exactly where the old one was.
-export const TRANSFER_PREFIXES = ['config', 'project:', 'group:', 'expiry:', 'request:', 'tutorial:', 'usage:', 'cfidx:'];
+export const TRANSFER_PREFIXES = ['config', 'project:', 'group:', 'expiry:', 'request:', 'change:', 'tutorial:', 'usage:', 'cfidx:'];
 
 export const KVS_PAGE = 100;
 export const AUDIT_PAGE = 200;

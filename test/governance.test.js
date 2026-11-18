@@ -224,6 +224,10 @@ test('compliance overview for Jira admins: reviews due, expiring soon, pending r
   assert.equal(boot.compliance.pendingRequests, 1);
   assert.ok(boot.compliance.reviewsDue.some((r) => r.groupId === 'g-admins' && r.projectKey === 'PROJ'));
   assert.ok(boot.compliance.expiringSoon.length >= 1, 'seeded expiry within 14 days');
+  // Each entry names the group and, where Jira knows the account, the person.
+  const first = boot.compliance.expiringSoon[0];
+  assert.ok(first.groupName, 'group name present');
+  assert.ok(first.displayName, 'person name present');
   assert.equal(boot.confluence.available, true);
 });
 

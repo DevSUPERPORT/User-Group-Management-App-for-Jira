@@ -7,7 +7,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -26,7 +26,7 @@ export function changeText(t, entry) {
   return t(`change.${entry.action}`, { name: entry.targetName ?? '' });
 }
 
-export function GroupDetail({ group, project, expiryEnabled, reviewInterval, onCountChange, onGroupUpdate, onOpenAudit }) {
+export function GroupDetail({ group, project, expiryEnabled, reviewInterval, onCountChange, onGroupUpdate, onOpenAudit, pendingWrites = false, canApply = false, me = null, onChangesChanged }) {
   const { t, fmt } = useI18n();
   const [detail, setDetail] = useState(null);
 
@@ -87,7 +87,7 @@ export function GroupDetail({ group, project, expiryEnabled, reviewInterval, onC
       </motion.div>
 
       <motion.div variants={item}>
-        <MemberSection group={group} expiryEnabled={expiryEnabled} reviewActive={Boolean(reviewInterval)} onCountChange={(n) => onCountChange(group.groupId, n)} onChanged={refresh} onReviewCompleted={(r) => onGroupUpdate(group.groupId, r)} />
+        <MemberSection group={group} pendingWrites={pendingWrites} canApply={canApply} me={me} onChangesChanged={onChangesChanged} expiryEnabled={expiryEnabled} reviewActive={Boolean(reviewInterval)} onCountChange={(n) => onCountChange(group.groupId, n)} onChanged={refresh} onReviewCompleted={(r) => onGroupUpdate(group.groupId, r)} />
       </motion.div>
 
       <motion.div className="detail-footer" variants={item}>

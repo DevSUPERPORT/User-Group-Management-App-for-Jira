@@ -1,23 +1,23 @@
 /**
  * Searchable, keyboard-navigable list of the project's groups with member counts and badges (review due, IdP sync,
- * created under an earlier project key).
+ * created under an earlier project key), plus the new groups that wait for a Jira admin (Jira-admin mode).
  *
  * @file        static/app/src/features/groups/GroupList.jsx
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { useI18n } from '../../i18n/index.jsx';
 import { Icon } from '../../components/Icon.jsx';
-import { GroupName, Pill, Skeleton } from '../../components/primitives.jsx';
+import { Button, GroupName, Pill, Skeleton } from '../../components/primitives.jsx';
 import { ease, spring } from '../../motion.js';
 
-export function GroupList({ groups, selectedId, onSelect, query, onQuery, highlightId }) {
-  const { t } = useI18n();
+export function GroupList({ groups, selectedId, onSelect, query, onQuery, highlightId, pendingGroups = [], me = null, onWithdraw }) {
+  const { t, fmt } = useI18n();
   const q = query.trim().toLowerCase();
   const visible = q ? groups.filter((g) => g.name.toLowerCase().includes(q) || (g.description ?? '').toLowerCase().includes(q)) : groups;
 
@@ -88,6 +88,40 @@ export function GroupList({ groups, selectedId, onSelect, query, onQuery, highli
           <motion.p className="muted small" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             {t('groups.noMatch', { query })}
           </motion.p>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {pendingGroups.length > 0 && (
+          <motion.section className="pending-groups stack-8" aria-labelledby="pending-groups-title" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <h3 id="pending-groups-title" className="eyebrow">
+              {t('pending.groupsTitle')}
+            </h3>
+            <ul className="group-items">
+              {pendingGroups.map((g) => (
+                <li key={g.ref} className="group-item is-pending">
+                  <span className="group-item-text">
+                    <span className="group-item-name">
+                      <GroupName prefix={g.prefix} name={g.namePart} />
+                    </span>
+                    <span className="group-item-meta">
+                      {t('changes.firstMembers', { count: g.members ?? 0 })} · {t('changes.requestedBy', { name: g.requestedBy?.displayName ?? '–', when: fmt.relative(g.requestedAt) })}
+                    </span>
+                    <span className="row-8 wrap">
+                      <Pill icon="clock" tone="warn">
+                        {t('pending.badge')}
+                      </Pill>
+                      {me && g.requestedBy?.accountId === me && onWithdraw && (
+                        <Button size="sm" variant="link" onClick={() => onWithdraw(g.ref)}>
+                          {t('changes.withdraw')}
+                        </Button>
+                      )}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </motion.section>
         )}
       </AnimatePresence>
 

@@ -6,30 +6,38 @@
  * kill-switch screens locally; ?ai=on|stopped previews the AI switch turned on, or turned on but stopped by SUPERPORT
  * (AI_BUDGET {"stop":true}); without it AI features are off, as on a fresh installation.
  *
+ * Jira-admin mode: ?mode=jiraAdmin|org sets "How group changes are made" (unset = as an older installation with an
+ * organization connection, i.e. organization mode; with ?org=off Jira-admin mode). ?as=projectAdmin makes the
+ * signed-in demo user a project admin without Jira admin rights on the project page (their changes then wait for a
+ * Jira admin; the admin page keeps the Jira admin view). ?consent=needed simulates a Jira admin who has not allowed
+ * the app to act on their behalf yet ("Grant access" then simulates Forge's "Allow access"). ?env=development shows
+ * the TEST ONLY switch on the admin page. In Jira-admin mode a few waiting changes from another project admin are
+ * seeded so the queue has content.
+ *
  * @file        static/app/src/api/demoBackend.js
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-16
+ * @updated     2026-11-19
  */
 
 import { createService } from '../../../../src/core/service.js';
 import { toErrorPayload } from '../../../../src/core/errors.js';
-import { memoryAudit, memoryConfluence, memoryJira, memoryOrg, memoryStore } from '../../../../src/dev/memory.js';
+import { memoryAudit, memoryConfluence, memoryJira, memoryJiraUser, memoryOrg, memoryStore } from '../../../../src/dev/memory.js';
 import { createSeed } from '../../../../src/dev/seed.js';
 
 // Mirrors the per-surface function lists in src/index.js.
 const ALLOWED = {
-  project: ['bootstrap', 'checkName', 'createGroup', 'accessMatrix', 'applyAccessChanges', 'getGroup', 'getMembers', 'updateDescription', 'searchUsers', 'addMembers', 'removeMember', 'removeMembers', 'setExpiry', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'decideRequest', 'reopenRequest', 'completeReview', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
-  admin: ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'saveOrgConnection', 'removeOrgConnection', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
+  project: ['bootstrap', 'checkName', 'createGroup', 'accessMatrix', 'applyAccessChanges', 'getGroup', 'getMembers', 'updateDescription', 'searchUsers', 'addMembers', 'removeMember', 'removeMembers', 'setExpiry', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'decideRequest', 'reopenRequest', 'completeReview', 'listChanges', 'applyChanges', 'rejectChanges', 'withdrawChanges', 'grantAccess', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
+  admin: ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'saveOrgConnection', 'removeOrgConnection', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex', 'listChanges', 'applyChanges', 'rejectChanges', 'grantAccess', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
   member: ['myGroups', 'requestAccess', 'withdrawRequest'],
   auditor: ['auditorBootstrap', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
 };
 // First-run tutorial: available on every surface.
 for (const list of Object.values(ALLOWED)) list.push('tutorialState', 'markTutorialSeen');
 // Mirrors READS in src/index.js: the resolvers that keep working while changes are paused.
-const READS = new Set(['bootstrap', 'checkName', 'accessMatrix', 'getGroup', 'getMembers', 'searchUsers', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'queryAudit', 'auditFilterOptions', 'exportAudit', 'tutorialState', 'myGroups', 'auditorBootstrap', 'adminBootstrap', 'exportData', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup']);
+const READS = new Set(['bootstrap', 'checkName', 'accessMatrix', 'getGroup', 'getMembers', 'searchUsers', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'queryAudit', 'auditFilterOptions', 'exportAudit', 'tutorialState', 'myGroups', 'auditorBootstrap', 'adminBootstrap', 'exportData', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup', 'listChanges', 'grantAccess']);
 const STATUS_URL = 'https://superapps.statuspage.io';
 const MODULES = { project: 'gum-project-settings', admin: 'gum-admin-page', member: 'gum-my-groups', auditor: 'gum-audit' };
 
@@ -50,16 +58,51 @@ function addGovernanceDemo(seed) {
   seed.audit.push({ id: 'rovo1', createdAt: now - 50 * 60 * 1000, projectId: '10001', projectKey: 'PROJ', action: 'DESCRIPTION_CHANGED', groupId: 'g-reviewer', groupName: 'atlassian-PROJ-reviewer', actorAccountId: 'u-me', actorName: 'George Papasotiriou', details: { from: '', to: 'Reviewer für Freigaben im PROJ-Workflow', via: 'rovo' } });
 }
 
+// Demo-only waiting changes (Jira-admin mode): requested by the project admin Paul Richter, plus one from the hourly
+// expiry job, and two already decided ones for the history.
+function addChangesDemo(seed) {
+  const now = Date.now();
+  const hour = 60 * 60 * 1000;
+  const day = 24 * hour;
+  const paul = { accountId: 'u-paul-richter', displayName: 'Paul Richter' };
+  seed.jira.perms['u-paul-richter'] = { jiraAdmin: false, projectAdminOf: ['10001'] };
+  const base = { projectId: '10001', projectKey: 'PROJ', status: 'pending', groupId: null, groupName: null, accountId: null, displayName: null, expiresAt: null, durationDays: null, endedAt: null, reason: null, note: null, requestId: null, create: null, via: null, requestedBy: paul, decidedBy: null, decidedAt: null, decisionNote: null, outcome: null, result: null, lastError: null };
+  const change = (id, extra) => {
+    seed.store[`change:10001:${id}`] = { ...base, id, ...extra };
+  };
+  change('c-add-1', { type: 'add', groupId: 'g-reviewer', groupName: 'atlassian-PROJ-reviewer', accountId: 'u-lena-koch', displayName: 'Lena Koch', durationDays: 30, reason: 'request', note: 'Ich gebe ab November die Releases für das Mobile-Team frei.', requestedAt: now - 2 * hour });
+  change('c-add-2', { type: 'add', groupId: 'g-admins', groupName: 'atlassian-PROJ-admins', accountId: 'u-nora-lange', displayName: 'Nora Lange', expiresAt: now + 45 * day, requestedAt: now - 5 * hour, via: 'rovo' });
+  change('c-remove-1', { type: 'remove', groupId: 'g-reviewer', groupName: 'atlassian-PROJ-reviewer', accountId: 'u-anna-beispiel', displayName: 'Anna Beispiel', reason: 'review', note: 'Wechselt ins Marketing.', requestedAt: now - 26 * hour });
+  change('c-create-1', { type: 'create', groupName: 'atlassian-PROJ-release-team', create: { namePart: 'release-team', fullName: 'atlassian-PROJ-release-team', description: 'Freigaben für Mobile-Releases', addMe: true, copyFrom: null, members: [{ accountId: 'u-paul-richter', displayName: 'Paul Richter', reason: null }, { accountId: 'u-mia-becker', displayName: 'Mia Becker', reason: null }] }, requestedAt: now - 30 * 60 * 1000 });
+  // The hourly job found an ended membership: removal waits for a Jira admin, the member shows "access ended".
+  const ended = Object.keys(seed.jira.users).find((id) => seed.jira.groups['g-reviewer'].members.includes(id) && id.startsWith('u-e'));
+  if (ended) {
+    seed.store[`expiry:g-reviewer:${ended}`] = { groupId: 'g-reviewer', accountId: ended, projectId: '10001', expiresAt: now - 3 * hour, setAt: now - 20 * day, setBy: paul, pendingChangeRef: '10001:c-expiry-1' };
+    change('c-expiry-1', { type: 'remove', groupId: 'g-reviewer', groupName: 'atlassian-PROJ-reviewer', accountId: ended, displayName: seed.jira.users[ended].displayName, reason: 'expiry', endedAt: now - 3 * hour, requestedBy: { accountId: null, displayName: 'system' }, requestedAt: now - 2 * hour });
+  }
+  change('c-done-1', { type: 'add', groupId: 'g-qa', groupName: 'atlassian-PRJ-qa', accountId: 'u-oskar-lindqvist', displayName: 'Oskar Lindqvist', status: 'applied', outcome: 'done', requestedAt: now - 3 * day, decidedAt: now - 2 * day, decidedBy: { accountId: 'u-admin', displayName: 'Dominik Admin' } });
+  change('c-done-2', { type: 'remove', groupId: 'g-admins', groupName: 'atlassian-PROJ-admins', accountId: 'u-paul-richter', displayName: 'Paul Richter', status: 'rejected', decisionNote: 'Paul bleibt Admin bis Jahresende.', requestedAt: now - 4 * day, decidedAt: now - 4 * day + 2 * hour, decidedBy: { accountId: 'u-admin', displayName: 'Dominik Admin' } });
+}
+
 export function createDemoBackend() {
   const params = new URLSearchParams(window.location.search);
   const seed = createSeed();
   if (params.get('governance') !== 'off') addGovernanceDemo(seed);
   const ai = params.get('ai');
   if (ai === 'on' || ai === 'stopped') seed.store.config = { ...seed.store.config, aiEnabled: true };
+  const orgConfigured = params.get('org') !== 'off';
+  const mode = ['jiraAdmin', 'org'].includes(params.get('mode')) ? params.get('mode') : null;
+  if (mode) seed.store.config = { ...seed.store.config, groupChanges: mode };
+  const jiraAdminMode = mode === 'jiraAdmin' || (!mode && !orgConfigured) || (mode === 'org' && !orgConfigured);
+  if (jiraAdminMode && params.get('changes') !== 'off') addChangesDemo(seed);
+  // ?as=projectAdmin: the demo user is a project admin only (project page); the admin page keeps the Jira admin.
+  const asProjectAdmin = params.get('as') === 'projectAdmin';
+  const jiraUser = memoryJiraUser(seed.jira, { needsConsent: params.get('consent') === 'needed' ? ['u-me'] : [] });
   const service = createService({
     jira: memoryJira(seed.jira),
     // ?org=off simulates a site that has not stored its organization connection yet.
-    org: memoryOrg(seed.jira, { configured: params.get('org') !== 'off' }),
+    org: memoryOrg(seed.jira, { configured: orgConfigured }),
+    jiraUser,
     // ?confluence=off simulates a site where the app is not installed in Confluence.
     confluence: memoryConfluence(seed.jira, { available: params.get('confluence') !== 'off' }),
     store: memoryStore(seed.store),
@@ -92,8 +135,14 @@ export function createDemoBackend() {
       await new Promise((r) => setTimeout(r, latency(name)));
       if (name === 'availability') return { data: { mode: maint, statusUrl: STATUS_URL, licensed: license === null || license.isActive } };
       if (maint === 'on' || (maint === 'readonly' && !READS.has(name))) return refusal(maint);
-      const ctx = { accountId: 'u-me', projectId: withProject ? '10001' : null, surface, license };
+      const ctx = { accountId: 'u-me', projectId: withProject ? '10001' : null, surface, license, environmentType: params.get('env') === 'development' ? 'DEVELOPMENT' : 'PRODUCTION' };
       if (!ALLOWED[surface].includes(name)) return { error: { code: 'FORBIDDEN', message: 'Not available here' } };
+      // Click-dummy only: in Jira, Forge shows its own "Allow access" prompt here.
+      if (name === 'grantAccess') {
+        jiraUser.grantConsent('u-me');
+        return { data: { ok: true } };
+      }
+      seed.jira.perms['u-me'].jiraAdmin = !(asProjectAdmin && surface === 'project');
       try {
         return { data: structuredClone(await service[name](ctx, payload ?? {})) };
       } catch (err) {

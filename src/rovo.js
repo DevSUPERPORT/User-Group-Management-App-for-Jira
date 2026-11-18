@@ -9,12 +9,14 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import { createService } from './core/service.js';
 import { jiraClient } from './forge/jiraClient.js';
 import { createOrgClient } from './forge/orgClient.js';
+import { jiraUserWriter } from './forge/jiraUserWriter.js';
+import { environmentTypeOf } from './forge/environment.js';
 import { confluenceClient } from './forge/confluenceClient.js';
 import { kvsSecrets, kvsStore } from './forge/kvsStore.js';
 import { sqlAudit } from './forge/sqlAudit.js';
@@ -26,6 +28,11 @@ const rovoAudit = {
   append: (entry) => sqlAudit.append({ ...entry, details: { ...(entry.details ?? {}), via: 'rovo' } }),
 };
 
-const actions = createRovoActions(createService({ jira: jiraClient, org: createOrgClient({ secrets: kvsSecrets }), confluence: confluenceClient, store: kvsStore, audit: rovoAudit }));
+// jiraUser: in Jira-admin mode a Jira admin's change runs as that user (asUser works in action invocations: the
+// calling user is the invocation's principal). environmentType: for the development-only test switch.
+const actions = createRovoActions(
+  createService({ jira: jiraClient, org: createOrgClient({ secrets: kvsSecrets }), jiraUser: jiraUserWriter, confluence: confluenceClient, store: kvsStore, audit: rovoAudit }),
+  { environmentType: environmentTypeOf },
+);
 
 export const { listGroups, groupDetails, whereUsed, auditLog, complianceCheck, createGroup, addMembers, removeMembers, setEndDate, updateDescription, decideRequest, personAccess, copyAccess, offboardPerson, copyMembers, undoLastChange } = actions;

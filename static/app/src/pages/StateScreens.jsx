@@ -120,6 +120,7 @@ export function DemoBar({ surface, lang }) {
     return `?${p.toString()}`;
   };
   const dark = document.documentElement.dataset.colorMode === 'dark';
+  const params = new URLSearchParams(window.location.search);
   return (
     <motion.nav className="demo-bar" aria-label={t('demo.label')} initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.8, type: 'spring', stiffness: 300, damping: 26 }}>
       <span className="demo-label">
@@ -147,6 +148,15 @@ export function DemoBar({ surface, lang }) {
       </a>
       <span className="demo-sep" />
       <a href={link({ theme: dark ? 'light' : 'dark' })}>{dark ? 'Light' : 'Dark'}</a>
+      <span className="demo-sep" />
+      {/* Jira-admin mode: who applies group changes, and whether the demo user is only a project admin. */}
+      <a href={link({ mode: 'jiraAdmin' })} aria-current={params.get('mode') === 'jiraAdmin' ? 'true' : undefined}>
+        {t('demo.modeJiraAdmin')}
+      </a>
+      <a href={link({ mode: 'org' })} aria-current={params.get('mode') === 'org' ? 'true' : undefined}>
+        {t('demo.modeOrg')}
+      </a>
+      <a href={link({ as: params.get('as') === 'projectAdmin' ? 'jiraAdmin' : 'projectAdmin' })}>{params.get('as') === 'projectAdmin' ? t('demo.asJiraAdmin') : t('demo.asProjectAdmin')}</a>
     </motion.nav>
   );
 }

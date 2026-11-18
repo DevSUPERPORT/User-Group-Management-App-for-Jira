@@ -7,13 +7,13 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService, AuditActions } from '../src/core/service.js';
-import { memoryAudit, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryJira, memoryJiraUser, memoryOrg, memoryStore } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 import { validateNamePart, parseGroupName } from '../src/core/naming.js';
 import { isBlocked, isFixedEntry } from '../src/core/blocklist.js';
@@ -27,11 +27,13 @@ function setup(overrides = {}) {
   const store = memoryStore({ ...seed.store, ...(overrides.store ?? {}) });
   const audit = memoryAudit(seed.audit);
   let n = 0;
-  // Writes always go through the Organization API: configured by default.
+  // The organization connection is configured by default (an older installation: organization mode). Without it the
+  // app runs in Jira-admin mode, where Jira admins write as themselves (jiraUser).
   const org = overrides.org === null ? null : overrides.org === 'unconfigured' ? memoryOrg(jiraState, { configured: false }) : memoryOrg(jiraState);
-  const service = createService({ jira: memoryJira(jiraState), org, store, audit, now: () => NOW, uuid: () => `id-${++n}` });
+  const jiraUser = memoryJiraUser(jiraState);
+  const service = createService({ jira: memoryJira(jiraState), org, jiraUser, store, audit, now: () => NOW, uuid: () => `id-${++n}` });
   const ctx = (extra = {}) => ({ accountId: 'u-me', projectId: '10001', surface: 'project', license: null, ...extra });
-  return { service, store, audit, jiraState, ctx, org };
+  return { service, store, audit, jiraState, ctx, org, jiraUser };
 }
 
 const codeOf = async (p) => {
@@ -279,7 +281,7 @@ test('a freshly created group that Jira does not know yet stays listed and repor
   const hidden = seed.jira.groups[created.groupId];
   delete seed.jira.groups[created.groupId];
   const members = await service.getMembers(ctx(), { groupId: created.groupId });
-  assert.deepEqual(members, { members: [], total: null, startAt: 0, syncing: true });
+  assert.deepEqual(members, { members: [], total: null, startAt: 0, syncing: true, pendingChanges: [] });
   const boot = await service.bootstrap(ctx());
   assert.equal(boot.groups.find((g) => g.groupId === created.groupId).syncing, true);
   // Jira catches up: back to normal, missing flag cleared.
@@ -290,13 +292,17 @@ test('a freshly created group that Jira does not know yet stays listed and repor
 
 const ORG_CONFIG = (extra = {}) => ({ config: { ...createSeed(NOW).store.config, ...extra } });
 
-test('Org API: selected but not configured -> writes fail with a clear code, reads still work', async () => {
+test('Org API: organization mode selected but not connected -> Jira-admin mode takes over, reads still work', async () => {
   for (const org of [null, 'unconfigured']) {
-    const { service, ctx } = setup({ org, store: ORG_CONFIG() });
+    const { service, ctx, jiraUser, jiraState } = setup({ org, store: ORG_CONFIG({ groupChanges: 'org' }) });
+    const admin = await service.adminBootstrap(ctx({ surface: 'admin', projectId: null }));
+    assert.deepEqual([admin.changeMode.selected, admin.changeMode.effective], ['org', 'jiraAdmin']);
     await service.bootstrap(ctx());
-    assert.equal(await codeOf(service.createGroup(ctx(), { namePart: 'neu' })), 'ORG_API_NOT_CONFIGURED');
-    assert.equal(await codeOf(service.addMembers(ctx(), { groupId: 'g-admins', accountIds: ['u-anna-beispiel'] })), 'ORG_API_NOT_CONFIGURED');
-    assert.equal((await service.getMembers(ctx(), { groupId: 'g-admins' })).total, 3);
+    assert.equal((await service.createGroup(ctx(), { namePart: 'neu' })).name, 'atlassian-PROJ-neu');
+    await service.addMembers(ctx(), { groupId: 'g-admins', accountIds: ['u-anna-beispiel'] });
+    assert.ok(jiraState.groups['g-admins'].members.includes('u-anna-beispiel'));
+    assert.deepEqual(jiraUser.calls.map((c) => c[0]), ['createGroup', 'addMember']);
+    assert.equal((await service.getMembers(ctx(), { groupId: 'g-admins' })).total, 4);
   }
 });
 
@@ -344,10 +350,12 @@ test('Org API: connection test is admin-only and reports configuration; config s
 
 test('Org connection: per site, Jira admins only, validated, audited without the key', async () => {
   const admin = (c) => c({ surface: 'admin', projectId: null });
-  const { service, ctx, jiraState, audit } = setup({ org: 'unconfigured', store: ORG_CONFIG() });
+  const { service, ctx, jiraState, audit, org, jiraUser } = setup({ org: 'unconfigured', store: ORG_CONFIG() });
   assert.deepEqual((await service.adminBootstrap(admin(ctx))).orgApi, { configured: false });
   await service.bootstrap(ctx());
-  assert.equal(await codeOf(service.createGroup(ctx(), { namePart: 'neu' })), 'ORG_API_NOT_CONFIGURED');
+  // A new installation without a connection runs in Jira-admin mode: the Jira admin creates groups as themselves.
+  assert.equal((await service.createGroup(ctx(), { namePart: 'vorher' })).name, 'atlassian-PROJ-vorher');
+  assert.equal(jiraUser.calls.length, 1);
 
   jiraState.perms['u-pa'] = { jiraAdmin: false, projectAdminOf: ['10001'] };
   jiraState.users['u-pa'] = { accountId: 'u-pa', displayName: 'PA' };
@@ -366,11 +374,15 @@ test('Org connection: per site, Jira admins only, validated, audited without the
   assert.ok(rows.some((e) => e.details?.changed?.includes('orgConnection')));
   assert.equal(JSON.stringify(rows).includes('top-secret'), false);
 
+  // Connecting does not switch the mode by itself: the installation stays in Jira-admin mode until an admin chooses.
+  assert.equal((await service.adminBootstrap(admin(ctx))).changeMode.selected, 'jiraAdmin');
   assert.equal((await service.createGroup(ctx(), { namePart: 'neu' })).name, 'atlassian-PROJ-neu');
+  assert.equal(org.calls.filter((c) => c[0] === 'createGroup').length, 0);
 
   assert.equal(await codeOf(service.removeOrgConnection(ctx({ accountId: 'u-pa', surface: 'admin' }))), 'NOT_ADMIN');
   assert.deepEqual(await service.removeOrgConnection(admin(ctx)), { configured: false });
-  assert.equal(await codeOf(service.createGroup(ctx(), { namePart: 'noch-eine' })), 'ORG_API_NOT_CONFIGURED');
+  assert.equal((await service.createGroup(ctx(), { namePart: 'noch-eine' })).name, 'atlassian-PROJ-noch-eine');
+  assert.equal(jiraUser.calls.filter((c) => c[0] === 'createGroup').length, 3);
 });
 
 test('UC-01: a failed "add me" after creating the group is reported, not swallowed', async () => {

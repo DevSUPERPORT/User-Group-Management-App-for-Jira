@@ -7,7 +7,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -21,6 +21,8 @@ import { Select } from '../../components/Select.jsx';
 import { NAME_PART_MAX, validateNamePart } from '../../../../../src/core/naming.js';
 import { ease, shake } from '../../motion.js';
 import { errorText } from '../errors.js';
+import { useNotify } from '../../components/Toaster.jsx';
+import { isConsentError, requestConsent } from '../changes/consent.js';
 
 const MAX_DESCRIPTION = 500;
 
@@ -28,7 +30,7 @@ const MAX_DESCRIPTION = 500;
 const normalize = (v) => v.toLowerCase().replace(/\s+/g, '-');
 
 // UC-01: create a group under the fixed prefix atlassian-<KEY>-.
-export function CreateGroupDialog({ project, prefix, groups = [], onClose, onCreated }) {
+export function CreateGroupDialog({ project, prefix, groups = [], onClose, onCreated, pendingMode = false }) {
   const { t } = useI18n();
   const [namePart, setNamePart] = useState('');
   const [description, setDescription] = useState('');
@@ -40,6 +42,8 @@ export function CreateGroupDialog({ project, prefix, groups = [], onClose, onCre
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [needsConsent, setNeedsConsent] = useState(false);
+  const notify = useNotify();
   const inputRef = useRef(null);
   const fieldControls = useAnimationControls();
   const reqRef = useRef(0);
@@ -82,7 +86,8 @@ export function CreateGroupDialog({ project, prefix, groups = [], onClose, onCre
       setSuccess(true);
       setTimeout(() => onCreated(group), 650);
     } catch (err) {
-      if (err.code === 'NAME_TAKEN') setCheck({ status: 'bad', reason: 'TAKEN', conflict: err.details?.conflict });
+      setNeedsConsent(isConsentError(err));
+      if (err.code === 'NAME_TAKEN') setCheck({ status: 'bad', reason: err.details?.reason === 'NAME_PENDING' ? 'PENDING' : 'TAKEN', conflict: err.details?.conflict });
       else setSubmitError(errorText(t, err));
       fieldControls.start(shake);
     } finally {
@@ -243,11 +248,23 @@ export function CreateGroupDialog({ project, prefix, groups = [], onClose, onCre
           <span>{t('create.note')}</span>
         </div>
 
+        {pendingMode && (
+          <div className="notice notice-warn">
+            <Icon name="clock" size={18} />
+            <span>{t('create.pendingNote')}</span>
+          </div>
+        )}
+
         <AnimatePresence>
           {submitError && (
             <motion.div className="notice notice-error" role="alert" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <Icon name="alert" size={18} />
-              <span>{submitError}</span>
+              <span className="grow">{submitError}</span>
+              {needsConsent && (
+                <Button size="sm" variant="dark" onClick={() => requestConsent(t, notify).then((ok) => ok && setSubmitError(null))}>
+                  {t('changes.grant')}
+                </Button>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -255,7 +272,7 @@ export function CreateGroupDialog({ project, prefix, groups = [], onClose, onCre
         <div className="actions">
           <Button onClick={onClose}>{t('create.cancel')}</Button>
           <Button type="submit" variant="primary" loading={submitting} success={success} aria-disabled={check.status !== 'ok' || undefined} className={check.status !== 'ok' ? 'is-soft-disabled' : ''}>
-            {t('create.submit')}
+            {pendingMode ? t('create.submitPending') : t('create.submit')}
           </Button>
         </div>
       </form>
