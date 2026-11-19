@@ -661,7 +661,7 @@ export function PeoplePanel({ onCountsChange, onOpenGroup, pendingWrites = false
 
       <AnimatePresence>
         {reviewOpen && (
-          <ApplyDialog
+          <ApplyDialog pendingWrites={pendingWrites}
             changes={changes}
             personById={personById}
             groupById={groupById}
@@ -677,7 +677,7 @@ export function PeoplePanel({ onCountsChange, onOpenGroup, pendingWrites = false
 
 // Review before apply: grouped by person, end date for additions, note for the
 // audit log, and an explicit tick when access is taken away.
-function ApplyDialog({ changes, personById, groupById, expiryEnabled, onClose, onApply }) {
+function ApplyDialog({ changes, personById, groupById, expiryEnabled, pendingWrites = false, onClose, onApply }) {
   const { t } = useI18n();
   const notify = useNotify();
   const [expiry, setExpiry] = useState(NO_EXPIRY);
