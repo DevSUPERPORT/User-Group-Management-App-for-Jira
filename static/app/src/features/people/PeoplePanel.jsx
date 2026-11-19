@@ -271,7 +271,7 @@ export function PeoplePanel({ onCountsChange, onOpenGroup, pendingWrites = false
     } else if (bad.length) {
       notify({ type: 'error', title: t('people.allFailed', { count: bad.length }) });
     }
-    if (waiting.length) notify({ type: 'info', title: t('people.pending', { count: waiting.length }), description: t('notify.pendingHint') });
+    if (waiting.length) notify({ type: 'info', title: t('people.waiting', { count: waiting.length }), description: t('notify.pendingHint') });
     return res;
   };
 
