@@ -24,7 +24,7 @@ import { useNotify } from '../../components/Toaster.jsx';
 import { collapse, ease, spring } from '../../motion.js';
 import { errorText } from '../errors.js';
 import { splitGroupName } from '../requests/RequestsPanel.jsx';
-import { isConsentError, requestConsent } from './consent.js';
+
 
 // One line describing the change ("Add Lena Koch" + group), shared with the member view.
 export function ChangeWhat({ change, showProject = false }) {
@@ -58,34 +58,6 @@ export function ChangeFacts({ change }) {
   return facts.length ? <span className="change-facts">{facts}</span> : null;
 }
 
-function ConsentNotice({ onGranted }) {
-  const { t } = useI18n();
-  const notify = useNotify();
-  const [busy, setBusy] = useState(false);
-  return (
-    <motion.div className="notice notice-warn consent-notice" role="alert" {...collapse}>
-      <Icon name="key" size={18} />
-      <span className="grow stack-4">
-        <strong>{t('changes.consentTitle')}</strong>
-        <span className="small">{t('changes.consentText')}</span>
-      </span>
-      <Button
-        size="sm"
-        variant="dark"
-        loading={busy}
-        onClick={async () => {
-          setBusy(true);
-          const ok = await requestConsent(t, notify);
-          setBusy(false);
-          if (ok) onGranted?.();
-        }}
-      >
-        {t('changes.grant')}
-      </Button>
-    </motion.div>
-  );
-}
-
 export function ChangeQueue({ scope = 'project', onCountChange, onApplied }) {
   const { t, fmt } = useI18n();
   const notify = useNotify();
@@ -95,7 +67,6 @@ export function ChangeQueue({ scope = 'project', onCountChange, onApplied }) {
   const [busy, setBusy] = useState(null); // ref, 'bulk-apply', 'bulk-reject'
   const [rejecting, setRejecting] = useState(null); // { refs: [...] }
   const [note, setNote] = useState('');
-  const [consent, setConsent] = useState(false);
   const [lastResults, setLastResults] = useState({}); // ref -> failed result
 
   const load = useCallback(() => {
@@ -136,7 +107,6 @@ export function ChangeQueue({ scope = 'project', onCountChange, onApplied }) {
     if (failed.length) {
       notify({ type: 'error', title: t('changes.failedN', { count: failed.length }), description: failed.length === 1 ? errorText(t, { code: failed[0].code, message: failed[0].error, details: failed[0].details ?? { reason: failed[0].reason } }) : undefined });
     }
-    if (res.consentRequired) setConsent(true);
     if (res.notJiraAdmin) notify({ type: 'error', title: t('changes.notJiraAdmin') });
     setSelected((s) => new Set([...s].filter((ref) => failed.some((f) => f.ref === ref))));
     onCountChange?.(res.pendingCount);
@@ -151,7 +121,6 @@ export function ChangeQueue({ scope = 'project', onCountChange, onApplied }) {
       report(res, 'applied');
       await load();
     } catch (err) {
-      if (isConsentError(err)) setConsent(true);
       notify({ type: 'error', title: errorText(t, err) });
     } finally {
       setBusy(null);
@@ -219,8 +188,6 @@ export function ChangeQueue({ scope = 'project', onCountChange, onApplied }) {
             <p className="muted small">{canApply ? t('changes.hint') : t('changes.waitingHint')}</p>
           </div>
         </div>
-
-        <AnimatePresence initial={false}>{consent && <ConsentNotice onGranted={() => setConsent(false)} />}</AnimatePresence>
 
         <AnimatePresence initial={false}>
           {canApply && pending.length > 0 && (

@@ -27,6 +27,7 @@ import { AuditLog } from '../features/audit/AuditLog.jsx';
 import { RequestsPanel } from '../features/requests/RequestsPanel.jsx';
 import { PeoplePanel } from '../features/people/PeoplePanel.jsx';
 import { ChangeQueue } from '../features/changes/ChangeQueue.jsx';
+import { ConsentBanner } from '../features/changes/ConsentBanner.jsx';
 import { Icon } from '../components/Icon.jsx';
 import { DetailSkeleton, EmptyGroups, StateScreen } from './StateScreens.jsx';
 import { ease } from '../motion.js';
@@ -230,6 +231,7 @@ export function ProjectPage() {
             <span>{t('pending.testNotice')}</span>
           </p>
         )}
+        <ConsentBanner />
         {pendingWrites && tab !== 'changes' && (
           <p className="notice pending-banner" role="status">
             <Icon name="clock" size={16} />

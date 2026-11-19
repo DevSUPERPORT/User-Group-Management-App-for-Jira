@@ -10,7 +10,7 @@
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-10-26
- * @updated     2026-11-05
+ * @updated     2026-11-19
  */
 
 export const DEMO = import.meta.env.DEV || import.meta.env.VITE_DEMO === 'true';
@@ -62,14 +62,30 @@ export function onLicenseInactive(listener) {
   return () => licenseListeners.delete(listener);
 }
 
+// Jira-admin mode: a change that Jira refused because the admin has not allowed the app to act as them yet
+// (USER_CONSENT_REQUIRED, alone or inside a batch result) raises the page's "Allow access" notice.
+const consentListeners = new Set();
+export function onConsentRequired(listener) {
+  consentListeners.add(listener);
+  return () => consentListeners.delete(listener);
+}
+const isConsent = (e) => e?.code === 'USER_CONSENT_REQUIRED' || e?.reason === 'CONSENT' || e?.details?.reason === 'CONSENT';
+function needsConsent(data) {
+  if (!data || typeof data !== 'object') return false;
+  if (data.consentRequired) return true;
+  return Array.isArray(data.results) && data.results.some(isConsent);
+}
+
 export async function call(name, payload = {}) {
   const b = await backend();
   const res = await b.invoke(name, payload);
   if (res && res.error) {
     if (res.error.code === 'UNAVAILABLE' && res.error.details?.mode) maintenanceListeners.forEach((l) => l(res.error.details));
     if (res.error.code === 'LICENSE_INACTIVE') licenseListeners.forEach((l) => l());
+    if (isConsent(res.error)) consentListeners.forEach((l) => l());
     throw new ApiError(res.error);
   }
+  if (needsConsent(res?.data)) consentListeners.forEach((l) => l());
   return res?.data;
 }
 

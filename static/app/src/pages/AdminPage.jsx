@@ -22,6 +22,7 @@ import { AdminConfig } from '../features/admin/AdminConfig.jsx';
 import { AuditLog } from '../features/audit/AuditLog.jsx';
 import { DataTransfer } from '../features/admin/DataTransfer.jsx';
 import { ChangeQueue } from '../features/changes/ChangeQueue.jsx';
+import { ConsentBanner } from '../features/changes/ConsentBanner.jsx';
 import { StateScreen } from './StateScreens.jsx';
 import { ease } from '../motion.js';
 import { Tour, TutorialButton, useTutorial } from '../features/tutorial/Tour.jsx';
@@ -97,6 +98,7 @@ export function AdminPage() {
         initial={false}
         transition={{ duration: 0.45, ease }}
       >
+        <ConsentBanner />
         {boot && tab === 'config' && (
           <motion.p className="muted small stats-line" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             {t('config.stats', { groups: boot.stats.managedGroups, projects: boot.stats.projects })}
