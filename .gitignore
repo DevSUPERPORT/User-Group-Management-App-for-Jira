@@ -16,8 +16,9 @@ coverage/
 *.log
 npm-debug.log*
 
-# Documentation (kept outside the repo)
-docs/
+# Documentation (kept outside the repo), except the Marketplace listing images (public, used for uploads)
+docs/*
+!docs/marketplace/
 doc/
 *.pdf
 *.docx
