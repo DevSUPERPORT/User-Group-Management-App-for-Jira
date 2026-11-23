@@ -1,7 +1,7 @@
 /**
  * Jira admin page (jira:adminPage): loads adminBootstrap and shows the configuration tab (settings, compliance,
- * how group changes are made, organization connection, data transfer), the changes that wait for a Jira admin
- * (Jira-admin mode, with a count on the tab and in the header) and the audit log of all projects.
+ * how group changes are made, data transfer), the changes that wait for a Jira admin (with a count on the tab and
+ * in the header) and the audit log of all projects.
  *
  * @file        static/app/src/pages/AdminPage.jsx
  * @app         Group Self-Service for Jira
@@ -11,7 +11,7 @@
  * @updated     2026-11-19
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { call } from '../api/client.js';
 import { useI18n } from '../i18n/index.jsx';
@@ -19,6 +19,7 @@ import { Footer, Header, Tabs } from '../components/Shell.jsx';
 import { Pill, Skeleton } from '../components/primitives.jsx';
 import { Icon } from '../components/Icon.jsx';
 import { AdminConfig } from '../features/admin/AdminConfig.jsx';
+import { SetupCard } from '../features/admin/SetupCard.jsx';
 import { AuditLog } from '../features/audit/AuditLog.jsx';
 import { DataTransfer } from '../features/admin/DataTransfer.jsx';
 import { ChangeQueue } from '../features/changes/ChangeQueue.jsx';
@@ -37,14 +38,32 @@ export function AdminPage() {
   const [version, setVersion] = useState(0);
   // Changes waiting for a Jira admin (Jira-admin mode): shown on the tab and in the header.
   const [waiting, setWaiting] = useState(0);
-  const tour = useTutorial('admin', Boolean(boot));
+  // A new site gets the short setup checklist instead of the tour; the tour stays one click away ("Tutorial").
+  const tour = useTutorial('admin', Boolean(boot), Boolean(boot?.setup?.dismissed));
+  const showSetup = Boolean(boot?.setup && !boot.setup.dismissed);
+  const reloadBoot = () =>
+    call('adminBootstrap')
+      .then((next) => {
+        setBoot(next);
+        setVersion((v) => v + 1);
+      })
+      .catch(() => {});
+  const reopenSetup = () =>
+    call('updateSetup', { step: 'reopen' })
+      .then((res) => setBoot((b) => ({ ...b, setup: res.setup })))
+      .catch(() => {});
 
+  // On the first load the page opens on "Changes to apply" when something waits for a Jira admin.
+  const firstLoad = useRef(true);
   const load = useCallback(() => {
     setError(null);
     call('adminBootstrap')
       .then((res) => {
         setBoot(res);
-        setWaiting(res.compliance?.pendingChanges ?? 0);
+        const count = res.compliance?.pendingChanges ?? 0;
+        setWaiting(count);
+        if (firstLoad.current && count > 0) setTab('changes');
+        firstLoad.current = false;
       })
       .catch(setError);
   }, []);
@@ -102,6 +121,14 @@ export function AdminPage() {
         {boot && tab === 'config' && (
           <motion.p className="muted small stats-line" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             {t('config.stats', { groups: boot.stats.managedGroups, projects: boot.stats.projects })}
+            {!showSetup && (
+              <>
+                {' · '}
+                <button type="button" className="link-button" onClick={reopenSetup}>
+                  {t('setup.reopen')}
+                </button>
+              </>
+            )}
           </motion.p>
         )}
         <AnimatePresence mode="wait" initial={false}>
@@ -117,6 +144,16 @@ export function AdminPage() {
               <ChangeQueue scope="admin" onCountChange={setWaiting} onApplied={() => call('adminBootstrap').then(setBoot).catch(() => {})} />
             ) : boot ? (
               <div className="stack-20">
+                {showSetup && (
+                  <SetupCard
+                    key={`setup-${version}`}
+                    initial={boot.setup}
+                    onChange={(setup, { privilegedChanged = false } = {}) => {
+                      if (privilegedChanged) reloadBoot();
+                      else setBoot((b) => ({ ...b, setup }));
+                    }}
+                  />
+                )}
                 {/* Remounted after an import so the imported configuration is shown. */}
                 <AdminConfig key={version} initial={boot} waiting={waiting} onOpenQueue={() => setTab('changes')} />
                 <DataTransfer

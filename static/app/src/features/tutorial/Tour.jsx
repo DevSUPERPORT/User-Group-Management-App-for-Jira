@@ -25,16 +25,17 @@ const PAD = 6; // spotlight padding around the target
 const EDGE = 16; // minimum distance to the page edge
 
 /**
- * Opens the tour once per user and surface, as soon as the page has loaded.
- * `start` reopens it from the "Tutorial" button.
+ * Opens the tour once per user and surface, as soon as the page has loaded (unless `auto` is false, e.g. while the
+ * admin page shows its setup checklist). `start` reopens it from the "Tutorial" button.
  */
-export function useTutorial(surface, ready) {
+export function useTutorial(surface, ready, auto = true) {
   const [open, setOpen] = useState(false);
   const checked = useRef(false);
 
   useEffect(() => {
     if (!ready || checked.current) return;
     checked.current = true;
+    if (!auto) return;
     // Click-dummy: ?tour=off for screenshots and automated UI checks.
     if (DEMO && !inForge && new URLSearchParams(window.location.search).get('tour') === 'off') return;
     call('tutorialState')
@@ -42,7 +43,7 @@ export function useTutorial(surface, ready) {
         if (!res?.seenVersion || res.seenVersion < TUTORIAL_VERSIONS[surface]) setOpen(true);
       })
       .catch(() => {});
-  }, [ready, surface]);
+  }, [ready, surface, auto]);
 
   const close = useCallback(
     (completed) => {

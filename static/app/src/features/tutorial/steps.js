@@ -14,7 +14,7 @@
  * @updated     2026-11-19
  */
 
-export const TUTORIAL_VERSIONS = { project: 3, member: 1, admin: 4, auditor: 1 };
+export const TUTORIAL_VERSIONS = { project: 5, member: 1, admin: 6, auditor: 1 };
 
 export const TOURS = {
   project: [
@@ -24,6 +24,7 @@ export const TOURS = {
     { id: 'usage', target: '[data-tour="usage"]' },
     { id: 'members', target: '[data-tour="members"]', points: 3 },
     { id: 'people', target: '#project-tabs-people' },
+    { id: 'roles', target: '#project-tabs-roles', optional: true },
     { id: 'requests', target: '#project-tabs-requests' },
     // Jira-admin mode only (the tab exists while Jira admins apply group changes).
     { id: 'changes', target: '#project-tabs-changes', optional: true },
@@ -39,11 +40,12 @@ export const TOURS = {
   ],
   admin: [
     { id: 'welcome', points: 3 },
+    // Only while the first-run checklist is shown (a new site, or "Setup checklist" reopened it).
+    { id: 'setup', target: '[aria-labelledby="sec-setup"]', optional: true, points: 3 },
     { id: 'compliance', target: '[aria-labelledby="sec-compliance"]', optional: true },
     { id: 'retention', target: '[aria-labelledby="sec-retention"]' },
     { id: 'mode', target: '[aria-labelledby="sec-mode"]' },
-    { id: 'org', target: '[aria-labelledby="sec-org"]' },
-    { id: 'roles', target: '[aria-labelledby="sec-roles"]', points: 3 },
+    { id: 'roles', target: '[aria-labelledby="sec-roles"]', points: 4 },
     { id: 'governance', target: '[aria-labelledby="sec-governance"]', points: 3 },
     { id: 'blocked', target: '[aria-labelledby="sec-blocked"]' },
     { id: 'projects', target: '[aria-labelledby="sec-projects"]' },

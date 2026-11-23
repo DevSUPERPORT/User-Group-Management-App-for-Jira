@@ -173,6 +173,15 @@ export function createSeed(now = Date.now()) {
       users,
       groups,
       perms: { 'u-me': { jiraAdmin: true, projectAdminOf: ['10001'] }, 'u-admin': { jiraAdmin: true, projectAdminOf: [] } },
+      // Project roles (role actors): people and groups. atlassian-addons-project-access is Jira's internal app role.
+      roles: {
+        '10001': [
+          { roleId: '10002', name: 'Administrators', description: 'Project administrators', users: ['u-me'], groups: ['g-admins'] },
+          { roleId: '10001', name: 'Developers', description: 'Work on issues and boards', users: ['u-anna-beispiel', 'u-lena-koch'], groups: ['g-big'] },
+          { roleId: '10003', name: 'Viewers', description: 'Read-only access', users: [], groups: ['g-reviewer'] },
+          { roleId: '10004', name: 'atlassian-addons-project-access', description: 'Apps', users: [], groups: [] },
+        ],
+      },
       usage,
       confluence,
       idpGroups: ['g-externe'],

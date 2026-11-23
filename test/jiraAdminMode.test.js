@@ -15,7 +15,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';
-import { memoryAudit, memoryConfluence, memoryJira, memoryJiraUser, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryConfluence, memoryJira, memoryJiraUser, memoryStore } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 import { createRovoActions } from '../src/rovoActions.js';
 import { AppError } from '../src/core/errors.js';
@@ -26,23 +26,21 @@ const ANNA = 'u-anna-beispiel'; // in g-reviewer
 const LENA = 'u-lena-koch'; // in no PROJ group except g-big
 const PA = 'u-pa';
 
-// org: true = connected (organization mode for an older installation without a stored setting), false = not.
 // mode: the stored setting, or undefined (never saved).
-function setup({ org = false, mode, consent = [], config = {}, clock } = {}) {
+function setup({ consent = [], config = {}, clock, secrets = null } = {}) {
   const seed = createSeed(NOW);
   seed.jira.perms[PA] = { jiraAdmin: false, projectAdminOf: ['10001'] };
   seed.jira.users[PA] = { accountId: PA, displayName: 'Pia Projektadmin', email: 'pia@example.com' };
-  seed.store.config = { ...seed.store.config, ...(mode ? { groupChanges: mode } : {}), ...config };
+  seed.store.config = { ...seed.store.config, ...config };
   const store = memoryStore(seed.store);
   const audit = memoryAudit([]);
   const time = clock ?? { now: NOW };
   let n = 0;
-  const orgClient = memoryOrg(seed.jira, { configured: org });
   const jiraUser = memoryJiraUser(seed.jira, { needsConsent: consent });
-  const service = createService({ jira: memoryJira(seed.jira), org: orgClient, jiraUser, confluence: memoryConfluence(seed.jira), store, audit, now: () => time.now, uuid: () => `c${++n}` });
+  const service = createService({ jira: memoryJira(seed.jira), secrets, jiraUser, confluence: memoryConfluence(seed.jira), store, audit, now: () => time.now, uuid: () => `c${++n}` });
   const ctx = (accountId = PA, extra = {}) => ({ accountId, projectId: '10001', surface: 'project', license: null, ...extra });
   const adminCtx = (accountId = 'u-me', extra = {}) => ({ accountId, projectId: null, surface: 'admin', license: null, ...extra });
-  return { service, store, audit, jira: seed.jira, org: orgClient, jiraUser, ctx, adminCtx, time };
+  return { service, store, audit, jira: seed.jira, jiraUser, ctx, adminCtx, time };
 }
 
 const codeOf = async (p) => {
@@ -57,60 +55,49 @@ const actions = (audit) => audit._rows().map((r) => r.action).filter((a) => a !=
 
 // ---------------------------------------------------------------- mode resolution
 
-test('mode: new installations and installations without a connection run in Jira-admin mode', async () => {
-  const { service, adminCtx } = setup({ org: false });
+
+// ---------------------------------------------------------------- no organization API keys
+
+// A fake Forge secret store holding what versions up to 3.17 could keep for the organization connection.
+function legacySecrets(stored = { orgId: 'org-1', apiKey: 'secret-key-value', directoryId: 'dir-1' }) {
+  const map = new Map(stored ? [['org-connection', stored]] : []);
+  return { map, get: async (k) => map.get(k), set: async (k, v) => void map.set(k, v), delete: async (k) => void map.delete(k) };
+}
+
+test('no org keys: a key stored by an older version is deleted, audited without key material, and only once', async () => {
+  const secrets = legacySecrets();
+  const { service, store, audit } = setup({ secrets, config: { groupChanges: 'org' } });
+  assert.deepEqual(await service.purgeLegacyOrgConnection(), { removed: true });
+  assert.equal(secrets.map.size, 0, 'secret deleted');
+  assert.equal('groupChanges' in (await store.get('config')), false, 'old mode setting dropped');
+  const row = audit._rows().find((r) => r.action === 'CONFIG_CHANGED');
+  assert.deepEqual(row.details, { changed: ['orgConnection'], removed: true, reason: 'unsupported' });
+  assert.equal(row.actorName, 'system');
+  assert.ok(!JSON.stringify(audit._rows()).includes('secret-key-value'), 'the key never reaches the audit log');
+  assert.deepEqual(await service.purgeLegacyOrgConnection(), { removed: false }, 'idempotent');
+  assert.equal(audit._rows().filter((r) => r.action === 'CONFIG_CHANGED').length, 1);
+});
+
+test('no org keys: nothing stored or no secret store -> nothing happens', async () => {
+  assert.deepEqual(await setup({ secrets: legacySecrets(null) }).service.purgeLegacyOrgConnection(), { removed: false });
+  assert.deepEqual(await setup().service.purgeLegacyOrgConnection(), { removed: false });
+});
+
+test('no org keys: the admin page has no connection or mode switch; the old setting is ignored and not saved again', async () => {
+  const { service, adminCtx, store, ctx } = setup({ config: { groupChanges: 'org' } });
   const boot = await service.adminBootstrap(adminCtx());
-  assert.deepEqual([boot.changeMode.selected, boot.changeMode.effective, boot.config.groupChanges], ['jiraAdmin', 'jiraAdmin', 'jiraAdmin']);
+  assert.equal(boot.orgApi, undefined);
+  assert.equal(boot.changeMode, undefined);
+  assert.equal(boot.config.groupChanges, undefined);
+  for (const fn of ['testOrgApi', 'saveOrgConnection', 'removeOrgConnection']) assert.equal(service[fn], undefined, fn);
+  const saved = await service.saveConfig(adminCtx(), { config: { ...boot.config, groupChanges: 'org' } });
+  assert.equal(saved.config.groupChanges, undefined);
+  assert.equal('groupChanges' in (await store.get('config')), false);
+  // Even with the old setting stored, project admins' changes wait and Jira admins write as themselves.
+  const project = await service.bootstrap(ctx());
+  assert.deepEqual(project.changeMode, { effective: 'jiraAdmin', writes: 'pending' });
+  assert.equal((await service.bootstrap(ctx('u-me'))).changeMode.writes, 'direct');
 });
-
-test('mode: an older installation with a connection and no stored setting keeps organization mode', async () => {
-  const { service, adminCtx, ctx, org, jiraUser } = setup({ org: true });
-  const boot = await service.adminBootstrap(adminCtx());
-  assert.deepEqual([boot.changeMode.selected, boot.changeMode.effective, boot.changeMode.stored], ['org', 'org', false]);
-  await service.bootstrap(ctx('u-me'));
-  await service.addMembers(ctx('u-me'), { groupId: 'g-reviewer', accountIds: [LENA] });
-  assert.equal(org.calls.filter((c) => c[0] === 'addMember').length, 1);
-  assert.equal(jiraUser.calls.length, 0);
-  // A project admin's change applies at once, too (the organization connection writes).
-  await service.addMembers(ctx(PA), { groupId: 'g-reviewer', accountIds: ['u-mia-becker'] });
-  assert.equal(org.calls.filter((c) => c[0] === 'addMember').length, 2);
-});
-
-test('mode: organization mode without a connection is effectively Jira-admin mode, and shown as such', async () => {
-  const { service, adminCtx, ctx } = setup({ org: false, mode: 'org' });
-  const boot = await service.adminBootstrap(adminCtx());
-  assert.deepEqual([boot.changeMode.selected, boot.changeMode.effective], ['org', 'jiraAdmin']);
-  const pb = await service.bootstrap(ctx(PA));
-  assert.deepEqual(pb.changeMode, { effective: 'jiraAdmin', writes: 'pending' });
-});
-
-test('mode: only Jira admins change it; the change is audited with the new value and sanitised', async () => {
-  const { service, adminCtx, audit } = setup({ org: true });
-  const config = (await service.adminBootstrap(adminCtx())).config;
-  assert.equal(await codeOf(service.saveConfig(adminCtx(PA), { config: { ...config, groupChanges: 'jiraAdmin' } })), 'NOT_ADMIN');
-  const saved = await service.saveConfig(adminCtx(), { config: { ...config, groupChanges: 'jiraAdmin' } });
-  assert.deepEqual(saved.changed, ['groupChanges']);
-  assert.equal(saved.config.groupChanges, 'jiraAdmin');
-  assert.equal(saved.previous.groupChanges, 'org');
-  const entry = audit._rows().at(-1);
-  assert.equal(entry.action, 'CONFIG_CHANGED');
-  assert.equal(entry.details.groupChanges, 'jiraAdmin');
-  // Garbage keeps the current mode; a partial save does not flip it.
-  assert.equal((await service.saveConfig(adminCtx(), { config: { ...config, groupChanges: 'banana' } })).config.groupChanges, 'jiraAdmin');
-  assert.equal((await service.saveConfig(adminCtx(), { config: { retentionMonths: 12 } })).config.groupChanges, 'jiraAdmin');
-});
-
-test('mode: connecting or disconnecting the organization never switches the mode by itself', async () => {
-  const fresh = setup({ org: false });
-  await fresh.service.saveOrgConnection(fresh.adminCtx(), { orgId: 'org-1', apiKey: 'k' });
-  assert.equal((await fresh.service.adminBootstrap(fresh.adminCtx())).changeMode.selected, 'jiraAdmin');
-  const older = setup({ org: true });
-  await older.service.removeOrgConnection(older.adminCtx());
-  const boot = await older.service.adminBootstrap(older.adminCtx());
-  assert.deepEqual([boot.changeMode.selected, boot.changeMode.effective], ['org', 'jiraAdmin']);
-});
-
-// ---------------------------------------------------------------- Jira admins: directly, as themselves
 
 test('Jira admin: changes apply at once through Jira REST as the signed-in user', async () => {
   const { service, ctx, jira, jiraUser, audit } = setup();
@@ -312,7 +299,7 @@ test('queue: Jira answers 403 -> "Only Jira administrators can apply changes", t
     calls++;
     throw new AppError('JIRA_ADMIN_REQUIRED', 'Only Jira administrators can apply changes', { status: 403 });
   };
-  const refusing = createService({ jira: memoryJira(jira), org: null, jiraUser: { createGroup: refuse, addMember: refuse, removeMember: refuse }, store, audit: memoryAudit([]), now: () => NOW });
+  const refusing = createService({ jira: memoryJira(jira), jiraUser: { createGroup: refuse, addMember: refuse, removeMember: refuse }, store, audit: memoryAudit([]), now: () => NOW });
   const res = await refusing.applyChanges(adminCtx(), { refs });
   assert.equal(calls, 1, 'stops after the first 403');
   assert.deepEqual(res.results.map((r) => [r.status, r.code]), [['failed', 'JIRA_ADMIN_REQUIRED'], ['failed', 'JIRA_ADMIN_REQUIRED']]);
@@ -449,18 +436,6 @@ test('automation: deactivated accounts become pending removals (deduplicated, a 
   await service.rejectChanges(adminCtx(), { refs: [queued[0].ref] });
   assert.deepEqual(await service.runAutomation(), { removed: 0, queued: 0 }, 'a rejected removal is not asked again');
   assert.ok((await store.list('change:')).length >= 1);
-});
-
-test('automation: organization mode still removes directly, as before', async () => {
-  const { service, store, jira, org } = setup({ org: true, config: { autoRemoveDeactivated: true } });
-  await store.set(`expiry:g-reviewer:${ANNA}`, { groupId: 'g-reviewer', accountId: ANNA, projectId: '10001', expiresAt: NOW - 1000, setAt: NOW - DAY, setBy: null });
-  assert.deepEqual(await service.runExpiry(), { removed: 1, dropped: 0, failed: 0 });
-  assert.ok(!jira.groups['g-reviewer'].members.includes(ANNA));
-  const auto = await service.runAutomation();
-  assert.ok(auto.removed >= 1);
-  assert.equal(auto.queued, undefined);
-  assert.ok(org.calls.some((c) => c[0] === 'removeMember'));
-  assert.equal((await store.list('change:')).length, 0);
 });
 
 // ---------------------------------------------------------------- Rovo

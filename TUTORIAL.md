@@ -124,9 +124,22 @@ The **Audit log** tab lists every change in your project. Filter by **Period**, 
 
 You can also **Export members as CSV** (download icon) from any group.
 
-### 1.11 When a Jira admin applies your changes
+### 1.11 Manage the project's roles — the Roles tab
 
-On many sites only Jira administrators may change groups, so the Jira admin chooses **Jira administrators apply changes** (Part 3.1). You then see the note *Changes you make here wait for a Jira administrator* at the top of the page, and everything you change waits for a Jira admin instead of applying at once:
+The **Roles** tab lists the roles of your project (for example *Administrators*, *Developers*, *Viewers*) with the people and groups in each. Roles control access inside this project through its permission scheme.
+
+- **Add people:** pick a role, type at least 2 letters of a name or email, choose one or more people and click **Add**. This applies **at once** with your own Jira rights, exactly as in Jira's project settings; no Jira admin is needed. **Undo** in the message takes it back.
+- **Remove people:** click the remove button next to a person and confirm. **Undo** puts them back. You cannot remove yourself (that could take away your own project admin rights); ask another project admin.
+- **Add a group:** under *Groups in this role*, type a group name (your project's own groups are listed first, marked *This project's group*) and pick it. It applies at once; **Undo** takes it back. Everyone in the group gets the role.
+- **Remove a group:** click the remove button next to it and confirm; **Undo** puts it back. Protected groups (admin and product-access groups, and groups your Jira admin blocked) show **Protected** and can only be changed by a Jira admin in Jira's project settings.
+- To change who is *in* one of your project's groups, open it with **Open group**.
+- Every change is in the audit log as *Added to role* / *Removed from role*.
+
+The first time, Jira may ask you to allow the app to act as you: click **Grant access** in the note at the top and confirm Jira's **Allow access**.
+
+### 1.12 When a Jira admin applies your changes
+
+Atlassian only lets Jira administrators change groups, so group changes (not role changes) wait for a Jira admin. You see the note *Changes you make here wait for a Jira administrator* at the top of the page; **Copy link for your Jira admin** copies the address of the page where the Jira admin applies them, so you can send it by chat or email. Everything you change in groups waits instead of applying at once:
 
 - **New group:** the dialog button says **Request group**. The group appears under **Requested groups** below the group list, marked **Waiting for a Jira admin**.
 - **Adding or removing people:** the group shows a box **Waiting for a Jira administrator** with each person and *will be added* / *will be removed*. A person whose removal waits is marked **Removal waiting for a Jira admin**; someone whose end date has passed is marked **Access ended – removal waiting for a Jira admin**.
@@ -135,6 +148,8 @@ On many sites only Jira administrators may change groups, so the Jira admin choo
 - When a Jira admin applies or rejects a change, the tab lists it under **Recently decided**, with the Jira admin's note if they rejected it.
 
 Every rule (name prefix, blocked and IdP groups, the "own project only" rule) is checked when you ask and again when the Jira admin applies it.
+
+If your Jira admin switched on **Apply project admins' changes automatically** (Part 3.1), none of this applies: there is no *Changes you make here wait* note and your group changes apply at once, as in Part 1. The audit log shows you as the person who made the change, *(applied as …)* the Jira admin whose account the app used.
 
 ---
 
@@ -170,23 +185,31 @@ Three tabs: **Configuration**, **Changes to apply** and **Audit log (all project
 
 ### 3.1 First-time setup checklist
 
-1. **Choose how group changes are made.** Under **How group changes are made**:
-   - **Jira administrators apply changes (recommended):** your own changes apply at once, with your Jira admin rights. Changes by project admins, and automatic removals, wait under **Changes to apply** until a Jira admin applies them (3.5). No organization key needed.
-   - **Organization connection applies changes:** every change applies at once and automatic removals run by themselves, but you need the optional organization connection (next step).
+On a new site the page opens with **Get started in 3 steps**:
 
-   The line **In effect now** shows what really happens. If you pick the organization connection without connecting one, the app keeps working as *Jira administrators apply changes* until you do.
-2. *(Optional)* **Connect your organization.** Only for the second choice. Under **Optional: organization connection**, click **Connect an organization**, enter your organization ID and an organization API key from an organization admin (admin.atlassian.com → Settings → API keys), and click **Check and save**. Please note that such a key has full organization admin access. It is stored encrypted for your site only. Later, **Test connection** checks it again; **Replace key** and **Disconnect** change it.
+1. **Allow the app to act as you** – click **Grant access** and confirm Jira's prompt.
+2. **Choose how project admins' changes apply** – **Apply at once with my account** (recommended; see below) or **I'll review each change**.
+3. **Tell your project admins** – **Copy message** copies a short note for chat or email that tells them where to find the app.
+
+Then click **Done**. Everything else already has safe defaults; the sections below explain each setting. **Setup checklist** next to the group count brings the checklist back.
+
+In detail:
+
+1. **How group changes are made.** Jira administrators apply group changes with their own Jira rights: your own changes apply at once. Changes by project admins, and automatic removals, wait under **Changes to apply** until a Jira admin applies them (3.5). The app needs no organization API key.
+   - **Apply project admins' changes automatically** (optional): click **Use my account** and project admins' group changes, ended memberships and the deactivated-account clean-up apply at once, with your account, as if you applied them by hand. The app stores no password, token or key, only which account to use. Before each change it checks that you are still an active Jira admin; if not, it pauses by itself and changes wait again (the section shows **Paused** and why; click **Use my account** again to resume). Any Jira admin can click **Stop**. Every change is in the audit log with the project admin who made it and *(applied as …)* your name. Changes that were already waiting stay under **Changes to apply**.
+2. **Allow access once.** The first time you change a group, Jira asks you to allow the app to act as you. If the page shows **Allow the app to act as you**, click **Grant access** and allow it in Jira's prompt.
 3. **Choose projects.** Under **Enabled projects**, pick **All projects** or **Selected projects only**.
 4. **Review the block list.** Core admin and product-access groups are **Always blocked**. Add your own under **Additionally blocked** (wildcards like `jira-admins-*` are allowed).
 5. **Mark IdP groups.** Under **Synchronised groups**, add groups your identity provider manages so they show as read-only.
 6. **Set audit retention.** **Never delete**, or **Delete after** N months.
-7. Click **Save**. Changing how group changes are made is written to the audit log.
+7. Click **Save**. Every change is written to the audit log.
 
 ### 3.2 Roles & features
 
 | Setting | What it does |
 | --- | --- |
 | Show the "My groups" page to project members | Members can see their own groups (read-only) |
+| Project admins manage their project's roles | Shows the **Roles** tab (1.11): people and groups in roles; changes apply at once with the project admin's own Jira rights; protected groups stay locked |
 | Allow time-limited memberships | Enables end dates and automatic removal |
 | Auditor groups | Members can read and export the full audit log |
 
@@ -217,7 +240,7 @@ With **Jira administrators apply changes**, the tab **Changes to apply** (also s
 - Tick several entries (or **Select all**) to apply or reject them at once. Each change gets its own result; anything that fails stays in the list with the reason, e.g. *The group also grants access in other projects*.
 - The first time, Jira may ask you to **allow the app to act on your behalf**. Click **Grant access** and confirm Jira's **Allow access**. If Jira shows no prompt, reload the page and allow access when asked.
 
-Jira admins also see **Changes to apply** for the current project on the project's page (project settings → Apps → Group Self-Service for Jira).
+When something waits, the admin page opens directly on **Changes to apply**. On every project's page, Jira admins also see *N changes by project admins wait for a Jira admin (all projects)* with a button that opens this list, and the tab **Changes to apply** for the current project.
 
 ### 3.6 Move data to another installation (export & import)
 

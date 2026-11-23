@@ -1,5 +1,5 @@
 /**
- * Group writes as the signed-in Jira administrator (Jira-admin mode): Jira REST through asUser().
+ * Group writes as a Jira administrator: Jira REST through asUser().
  *
  * Atlassian rejects these endpoints for the app user (asApp → 403), but accepts them for a user who is a Jira
  * administrator ("Administrator privileges are required" otherwise). The service only ever hands this writer to
@@ -13,12 +13,17 @@
  * the original error through on purpose: src/index.js rethrows it from the grantAccess resolver, and Forge then
  * shows its own consent prompt ("Allow access").
  *
+ * Automatic changes (like CSUM's "privileged user"): a Jira admin can let project admins' group changes and the
+ * scheduled removals apply at once. The service then passes `as = { accountId, impersonate: true }` for that admin
+ * and the call runs as asUser(accountId) (Forge offline impersonation; manage:jira-configuration has
+ * allowImpersonation in manifest.yml). Jira checks that admin's own rights on every call; no credentials are stored.
+ *
  * @file        src/forge/jiraUserWriter.js
  * @app         Group Self-Service for Jira
  * @author      George Papasotiriou
  * @company     SUPERPORT
  * @created     2026-11-19
- * @updated     2026-11-19
+ * @updated     2026-11-23
  */
 
 import { asUser, route } from '@forge/api';
@@ -44,10 +49,15 @@ function safeJson(text) {
   }
 }
 
-async function send(path, { method = 'GET', body, notFound } = {}) {
+// asUser() acts as the user of the current invocation; with `impersonate` it acts as the given account instead.
+function clientFor(as) {
+  return as?.impersonate && as.accountId ? asUser(as.accountId) : asUser();
+}
+
+async function send(path, { method = 'GET', body, notFound, forbidden } = {}, as = null) {
   let res;
   try {
-    res = await asUser().requestJira(path, {
+    res = await clientFor(as).requestJira(path, {
       method,
       headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
@@ -60,8 +70,10 @@ async function send(path, { method = 'GET', body, notFound } = {}) {
   const text = await res.text();
   const json = text ? safeJson(text) : null;
   if (res.ok) return json;
+  console.warn('Jira refused a write', method, res.status, as?.impersonate ? 'impersonated' : 'user');
   const message = [...(json?.errorMessages ?? []), ...Object.values(json?.errors ?? {})].join(' ') || json?.message || text || `HTTP ${res.status}`;
   if (res.status === 401) throw consentError(Object.assign(new Error(message), { status: 401 }));
+  if (res.status === 403 && forbidden) throw new AppError(forbidden, 'Jira did not allow this change for you', { status: 403, jira: message });
   if (res.status === 403) throw new AppError(ErrorCodes.JIRA_ADMIN_REQUIRED, 'Only Jira administrators can apply changes', { status: 403, jira: message });
   if (/already a member/i.test(message)) throw new AppError('ALREADY_MEMBER', message);
   if (/not a member|is not in the group|does not belong/i.test(message)) throw new AppError('NOT_MEMBER', message);
@@ -72,21 +84,40 @@ async function send(path, { method = 'GET', body, notFound } = {}) {
 }
 
 /**
- * The service passes `as` ({ accountId }) with every call; Forge ignores it (asUser() always acts as the user of
- * the current invocation). The in-memory writer (src/dev/memory.js) uses it to simulate Jira's 403.
+ * The service passes `as` ({ accountId }) with every call. Without `impersonate` Forge acts as the user of the
+ * current invocation anyway; the in-memory writer (src/dev/memory.js) uses `as` to simulate Jira's 403.
  */
 export const jiraUserWriter = {
-  async createGroup(name) {
-    const g = await send(route`/rest/api/3/group`, { method: 'POST', body: { name } });
+  async createGroup(name, as) {
+    const g = await send(route`/rest/api/3/group`, { method: 'POST', body: { name } }, as);
     return { groupId: g.groupId, name: g.name ?? name };
   },
 
-  async addMember(groupId, accountId) {
-    await send(route`/rest/api/3/group/user?groupId=${groupId}`, { method: 'POST', body: { accountId }, notFound: ErrorCodes.GROUP_NOT_FOUND });
+  async addMember(groupId, accountId, as) {
+    await send(route`/rest/api/3/group/user?groupId=${groupId}`, { method: 'POST', body: { accountId }, notFound: ErrorCodes.GROUP_NOT_FOUND }, as);
   },
 
-  async removeMember(groupId, accountId) {
-    await send(route`/rest/api/3/group/user?groupId=${groupId}&accountId=${accountId}`, { method: 'DELETE', notFound: ErrorCodes.GROUP_NOT_FOUND });
+  async removeMember(groupId, accountId, as) {
+    await send(route`/rest/api/3/group/user?groupId=${groupId}&accountId=${accountId}`, { method: 'DELETE', notFound: ErrorCodes.GROUP_NOT_FOUND }, as);
+  },
+
+  // Project roles: Jira lets the project's own admins (Administer Projects) and Jira admins change role members, so
+  // these run with the caller's own rights; nobody gains anything they could not do in Jira's project settings.
+  async addRoleActor(projectId, roleId, accountId) {
+    await send(route`/rest/api/3/project/${projectId}/role/${roleId}`, { method: 'POST', body: { user: [accountId] }, forbidden: ErrorCodes.ROLE_FORBIDDEN, notFound: ErrorCodes.ROLE_NOT_FOUND });
+  },
+
+  // Groups in roles (same endpoints, actor type group; Jira allows it for the project's admins as well).
+  async addRoleGroup(projectId, roleId, groupId) {
+    await send(route`/rest/api/3/project/${projectId}/role/${roleId}`, { method: 'POST', body: { groupId: [groupId] }, forbidden: ErrorCodes.ROLE_FORBIDDEN, notFound: ErrorCodes.ROLE_NOT_FOUND });
+  },
+
+  async removeRoleGroup(projectId, roleId, groupId) {
+    await send(route`/rest/api/3/project/${projectId}/role/${roleId}?groupId=${groupId}`, { method: 'DELETE', forbidden: ErrorCodes.ROLE_FORBIDDEN, notFound: 'NOT_MEMBER' });
+  },
+
+  async removeRoleActor(projectId, roleId, accountId) {
+    await send(route`/rest/api/3/project/${projectId}/role/${roleId}?user=${accountId}`, { method: 'DELETE', forbidden: ErrorCodes.ROLE_FORBIDDEN, notFound: 'NOT_MEMBER' });
   },
 
   // Harmless asUser read. A missing consent is NOT mapped here: the grantAccess resolver lets Forge's own
@@ -94,5 +125,14 @@ export const jiraUserWriter = {
   async requestConsent() {
     const res = await asUser().requestJira(route`/rest/api/3/myself`, { headers: { Accept: 'application/json' } });
     return { ok: res.ok, status: res.status };
+  },
+
+  // Checks that the app can act as this account outside of their own session (offline impersonation): a harmless
+  // read as asUser(accountId). The offline token only carries the scopes marked allowImpersonation
+  // (manage:jira-configuration), and Forge never allows profile reads such as /myself offline, so this reads Jira's
+  // advanced settings: covered by that scope, and Jira only answers it for Jira admins (403 otherwise).
+  async checkImpersonation(as) {
+    await send(route`/rest/api/3/application-properties/advanced-settings`, {}, { accountId: as?.accountId, impersonate: true });
+    return { accountId: as?.accountId ?? null };
   },
 };

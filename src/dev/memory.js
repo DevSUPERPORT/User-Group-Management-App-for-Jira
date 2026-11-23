@@ -127,10 +127,29 @@ export function memoryJira(state) {
       if (!s.users[accountId]) throw new AppError(ErrorCodes.JIRA_ERROR, 'User not found');
       return user(accountId);
     },
+    async getProjectRoles(projectId) {
+      const roles = (s.roles ?? {})[projectId] ?? [];
+      const name = (id) => s.users[id]?.displayName ?? id;
+      return roles
+        .map((r) => ({
+          roleId: r.roleId,
+          name: r.name,
+          description: r.description ?? '',
+          actors: [
+            ...r.users.map((id) => ({ type: 'user', accountId: id, displayName: name(id), avatarUrl: null })),
+            ...(r.groups ?? []).map((gid) => ({ type: 'group', groupId: gid, name: s.groups[gid]?.name ?? gid })),
+          ],
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
     async getUserGroups(accountId) {
       return Object.values(s.groups)
         .filter((g) => g.members.includes(accountId))
         .map((g) => ({ groupId: g.groupId, name: g.name }));
+    },
+    async getGroup(groupId) {
+      const g = s.groups[groupId];
+      return g ? { groupId: g.groupId, name: g.name } : null;
     },
     async findGroupByName(name) {
       const g = Object.values(s.groups).find((x) => x.name.toLowerCase() === name.toLowerCase());
@@ -203,81 +222,12 @@ export function memoryJira(state) {
 }
 
 /**
- * Fake Organization Admin API over the same state as memoryJira.
- * `configured` simulates whether the site has stored its organization connection.
- * connect() accepts any key except "invalid" (rejected like a revoked key) and asks
- * for a directory when the organization ID ends in "-multi".
- */
-export function memoryOrg(state, { configured = true } = {}) {
-  const jira = memoryJira(state);
-  const calls = [];
-  let conn = configured ? { orgId: 'org-demo', directoryId: 'dir-1', directoryName: 'SUPERPORT', updatedAt: null, updatedBy: null } : null;
-  const status = () => (conn ? { configured: true, ...conn } : { configured: false });
-  const required = () => {
-    if (!conn) throw new AppError(ErrorCodes.ORG_API_NOT_CONFIGURED, 'The organization connection is not set up');
-  };
-  return {
-    calls,
-    async isConfigured() {
-      return Boolean(conn);
-    },
-    async status() {
-      return status();
-    },
-    async check() {
-      required();
-      return { directories: [{ directoryId: conn.directoryId, name: conn.directoryName }], directoryId: conn.directoryId };
-    },
-    async connect({ orgId, apiKey, directoryId = null }, updatedBy = null) {
-      calls.push(['connect', orgId]);
-      if (!String(orgId ?? '').trim()) throw new AppError(ErrorCodes.BAD_REQUEST, 'Invalid organization ID', { field: 'orgId' });
-      if (!String(apiKey ?? '').trim()) throw new AppError(ErrorCodes.BAD_REQUEST, 'Invalid API key', { field: 'apiKey' });
-      if (apiKey === 'invalid') throw new AppError(ErrorCodes.ORG_API_UNAUTHORIZED, 'The API key is not valid', { status: 401 });
-      const directories = String(orgId).endsWith('-multi')
-        ? [{ directoryId: 'dir-1', name: 'SUPERPORT' }, { directoryId: 'dir-2', name: 'Partners' }]
-        : [{ directoryId: 'dir-1', name: 'SUPERPORT' }];
-      const picked = directoryId ? directories.find((d) => d.directoryId === directoryId) : directories.length === 1 ? directories[0] : null;
-      if (!picked) throw new AppError(ErrorCodes.ORG_DIRECTORY_REQUIRED, 'Choose a directory', { directories });
-      conn = { orgId: String(orgId).trim(), directoryId: picked.directoryId, directoryName: picked.name, updatedAt: Date.now(), updatedBy };
-      return status();
-    },
-    async disconnect() {
-      conn = null;
-      return status();
-    },
-    async createGroup(name, description) {
-      required();
-      calls.push(['createGroup', name, description]);
-      return jira.createGroup(name);
-    },
-    async addMember(groupId, accountId, groupName) {
-      required();
-      calls.push(['addMember', groupId, accountId, groupName]);
-      return jira.addMember(groupId, accountId);
-    },
-    async removeMember(groupId, accountId, groupName) {
-      required();
-      calls.push(['removeMember', groupId, accountId, groupName]);
-      return jira.removeMember(groupId, accountId);
-    },
-    async groupExists(groupId) {
-      required();
-      return Boolean(state.groups?.[groupId]);
-    },
-    async getGroupMeta(groupId) {
-      const synced = (state.idpGroups ?? []).includes(groupId);
-      return { externalSynced: synced, managedBy: synced ? 'scim' : null, modifiable: !synced };
-    },
-  };
-}
-
-/**
  * Fake Jira REST writes made as the signed-in user (asUser), over the same state as memoryJira (Jira-admin mode).
  * Like Jira: only Jira admins may write (403 "Administrator privileges are required" otherwise). `needsConsent`
  * lists accounts that have not allowed the app to act for them yet: their calls fail like Forge's
  * NeedsAuthenticationError (wrapped as USER_CONSENT_REQUIRED by src/forge/jiraUserWriter.js).
  */
-export function memoryJiraUser(state, { needsConsent = [] } = {}) {
+export function memoryJiraUser(state, { needsConsent = [], impersonation = true } = {}) {
   const s = state;
   const calls = [];
   const consent = new Set(needsConsent);
@@ -289,6 +239,16 @@ export function memoryJiraUser(state, { needsConsent = [] } = {}) {
       err.cause = cause;
       throw err;
     }
+  };
+  const roleCheck = (as, projectId) => {
+    consentCheck(as);
+    const p = s.perms?.[as?.accountId] ?? {};
+    if (!p.jiraAdmin && !(p.projectAdminOf ?? []).includes(String(projectId))) throw new AppError(ErrorCodes.ROLE_FORBIDDEN, 'Jira did not allow this change for you', { status: 403 });
+  };
+  const role = (projectId, roleId) => {
+    const r = ((s.roles ?? {})[projectId] ?? []).find((x) => x.roleId === String(roleId));
+    if (!r) throw new AppError(ErrorCodes.ROLE_NOT_FOUND, 'Role not found');
+    return r;
   };
   const check = (as) => {
     consentCheck(as);
@@ -327,9 +287,50 @@ export function memoryJiraUser(state, { needsConsent = [] } = {}) {
       if (!g.members.includes(accountId)) throw new AppError('NOT_MEMBER', 'User is not a member of the group');
       g.members = g.members.filter((m) => m !== accountId);
     },
+    // Project roles: like Jira, the project's admins (Administer Projects) and Jira admins may change members.
+    async addRoleActor(projectId, roleId, accountId, as) {
+      roleCheck(as, projectId);
+      calls.push(['addRoleActor', projectId, roleId, accountId, as?.accountId]);
+      const r = role(projectId, roleId);
+      if (r.users.includes(accountId)) throw new AppError('ALREADY_MEMBER', 'User is already a member of the project role');
+      r.users.push(accountId);
+    },
+    async removeRoleActor(projectId, roleId, accountId, as) {
+      roleCheck(as, projectId);
+      calls.push(['removeRoleActor', projectId, roleId, accountId, as?.accountId]);
+      const r = role(projectId, roleId);
+      if (!r.users.includes(accountId)) throw new AppError('NOT_MEMBER', 'User is not a member of the project role');
+      r.users = r.users.filter((u) => u !== accountId);
+    },
+    async addRoleGroup(projectId, roleId, groupId, as) {
+      roleCheck(as, projectId);
+      calls.push(['addRoleGroup', projectId, roleId, groupId, as?.accountId]);
+      const r = role(projectId, roleId);
+      if (!s.groups[groupId]) throw new AppError(ErrorCodes.GROUP_NOT_FOUND, 'Group not found');
+      r.groups = r.groups ?? [];
+      if (r.groups.includes(groupId)) throw new AppError('ALREADY_MEMBER', 'Group is already a member of the project role');
+      r.groups.push(groupId);
+    },
+    async removeRoleGroup(projectId, roleId, groupId, as) {
+      roleCheck(as, projectId);
+      calls.push(['removeRoleGroup', projectId, roleId, groupId, as?.accountId]);
+      const r = role(projectId, roleId);
+      if (!(r.groups ?? []).includes(groupId)) throw new AppError('NOT_MEMBER', 'Group is not a member of the project role');
+      r.groups = r.groups.filter((g) => g !== groupId);
+    },
     async requestConsent(as) {
       if (consent.has(as?.accountId)) throw Object.assign(new Error('Authentication Required'), { name: 'NEEDS_AUTHENTICATION_ERR', status: 401 });
       return { ok: true, status: 200 };
+    },
+    // Offline impersonation (automatic changes): a harmless read as the given account.
+    async checkImpersonation(as) {
+      consentCheck(as);
+      if (!impersonation) throw new Error('Impersonation is not allowed for this app');
+      calls.push(['checkImpersonation', as?.accountId]);
+      return { accountId: as?.accountId ?? null };
+    },
+    withdrawConsent(accountId) {
+      consent.add(accountId);
     },
   };
 }

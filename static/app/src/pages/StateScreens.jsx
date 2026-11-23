@@ -149,13 +149,7 @@ export function DemoBar({ surface, lang }) {
       <span className="demo-sep" />
       <a href={link({ theme: dark ? 'light' : 'dark' })}>{dark ? 'Light' : 'Dark'}</a>
       <span className="demo-sep" />
-      {/* Jira-admin mode: who applies group changes, and whether the demo user is only a project admin. */}
-      <a href={link({ mode: 'jiraAdmin' })} aria-current={params.get('mode') === 'jiraAdmin' ? 'true' : undefined}>
-        {t('demo.modeJiraAdmin')}
-      </a>
-      <a href={link({ mode: 'org' })} aria-current={params.get('mode') === 'org' ? 'true' : undefined}>
-        {t('demo.modeOrg')}
-      </a>
+      {/* Whether the demo user is only a project admin (their changes then wait for a Jira admin). */}
       <a href={link({ as: params.get('as') === 'projectAdmin' ? 'jiraAdmin' : 'projectAdmin' })}>{params.get('as') === 'projectAdmin' ? t('demo.asJiraAdmin') : t('demo.asProjectAdmin')}</a>
     </motion.nav>
   );

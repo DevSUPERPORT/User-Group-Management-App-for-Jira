@@ -13,7 +13,7 @@
 
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { memoryAudit, memoryConfluence, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryConfluence, memoryJira, memoryStore } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 
 // ---------------------------------------------------------------- mocked Forge runtime
@@ -120,7 +120,6 @@ class FakeResolver {
 }
 mock.module('@forge/resolver', { defaultExport: FakeResolver });
 mock.module(src('forge/jiraClient.js'), { namedExports: { jiraClient: memoryJira(seed.jira) } });
-mock.module(src('forge/orgClient.js'), { namedExports: { createOrgClient: () => memoryOrg(seed.jira, { configured: false }) } });
 mock.module(src('forge/confluenceClient.js'), { namedExports: { confluenceClient: memoryConfluence(seed.jira) } });
 const store = memoryStore(seed.store);
 mock.module(src('forge/kvsStore.js'), { namedExports: { kvsStore: store, kvsSecrets: { get: async () => null, set: async () => {}, delete: async () => {} } } });

@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';
 import { aiActive } from '../src/core/aiBudget.js';
 import { AI_DISABLED_MESSAGE } from '../src/rovoActions.js';
-import { memoryAudit, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryJira, memoryStore, memoryJiraUser } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 import { aiOn } from '../static/app/src/features/ai.js';
 import { TOURS, tourSteps } from '../static/app/src/features/tutorial/steps.js';
@@ -30,7 +30,7 @@ const quiet = () => {};
 function setup({ ai = null, env = GO } = {}) {
   const seed = createSeed(NOW);
   if (ai !== null) seed.store.config.aiEnabled = ai;
-  const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira), store: memoryStore(seed.store), audit: memoryAudit([]), now: () => NOW, env });
+  const service = createService({ jira: memoryJira(seed.jira), jiraUser: memoryJiraUser(seed.jira), store: memoryStore(seed.store), audit: memoryAudit([]), now: () => NOW, env });
   const project = { accountId: 'u-me', projectId: '10001', surface: 'project', license: null };
   const admin = { accountId: 'u-me', projectId: null, surface: 'admin', license: null };
   return { service, project, admin };

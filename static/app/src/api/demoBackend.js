@@ -6,13 +6,12 @@
  * kill-switch screens locally; ?ai=on|stopped previews the AI switch turned on, or turned on but stopped by SUPERPORT
  * (AI_BUDGET {"stop":true}); without it AI features are off, as on a fresh installation.
  *
- * Jira-admin mode: ?mode=jiraAdmin|org sets "How group changes are made" (unset = as an older installation with an
- * organization connection, i.e. organization mode; with ?org=off Jira-admin mode). ?as=projectAdmin makes the
- * signed-in demo user a project admin without Jira admin rights on the project page (their changes then wait for a
+ * Group changes: Jira admins apply them as themselves; ?as=projectAdmin makes the signed-in demo user a project admin without Jira admin rights on the project page (their changes then wait for a
  * Jira admin; the admin page keeps the Jira admin view). ?consent=needed simulates a Jira admin who has not allowed
  * the app to act on their behalf yet ("Grant access" then simulates Forge's "Allow access"). ?env=development shows
- * the TEST ONLY switch on the admin page. In Jira-admin mode a few waiting changes from another project admin are
- * seeded so the queue has content.
+ * the TEST ONLY switch on the admin page. A few waiting changes from another project admin are seeded so the queue
+ * has content (?changes=off leaves it empty). ?auto=on simulates automatic changes switched on by another Jira admin
+ * (Dominik Admin): with ?as=projectAdmin the project admin's changes then apply at once.
  *
  * @file        static/app/src/api/demoBackend.js
  * @app         Group Self-Service for Jira
@@ -24,20 +23,20 @@
 
 import { createService } from '../../../../src/core/service.js';
 import { toErrorPayload } from '../../../../src/core/errors.js';
-import { memoryAudit, memoryConfluence, memoryJira, memoryJiraUser, memoryOrg, memoryStore } from '../../../../src/dev/memory.js';
+import { memoryAudit, memoryConfluence, memoryJira, memoryJiraUser, memoryStore } from '../../../../src/dev/memory.js';
 import { createSeed } from '../../../../src/dev/seed.js';
 
 // Mirrors the per-surface function lists in src/index.js.
 const ALLOWED = {
-  project: ['bootstrap', 'checkName', 'createGroup', 'accessMatrix', 'applyAccessChanges', 'getGroup', 'getMembers', 'updateDescription', 'searchUsers', 'addMembers', 'removeMember', 'removeMembers', 'setExpiry', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'decideRequest', 'reopenRequest', 'completeReview', 'listChanges', 'applyChanges', 'rejectChanges', 'withdrawChanges', 'grantAccess', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
-  admin: ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'saveOrgConnection', 'removeOrgConnection', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex', 'listChanges', 'applyChanges', 'rejectChanges', 'grantAccess', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
+  project: ['bootstrap', 'checkName', 'createGroup', 'accessMatrix', 'applyAccessChanges', 'getGroup', 'getMembers', 'updateDescription', 'searchUsers', 'addMembers', 'removeMember', 'removeMembers', 'setExpiry', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'decideRequest', 'reopenRequest', 'completeReview', 'listChanges', 'applyChanges', 'rejectChanges', 'withdrawChanges', 'listRoles', 'addRoleMembers', 'removeRoleMember', 'searchRoleGroups', 'addRoleGroups', 'removeRoleGroup', 'grantAccess', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
+  admin: ['adminBootstrap', 'saveConfig', 'setPrivilegedAdmin', 'clearPrivilegedAdmin', 'updateSetup', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex', 'listChanges', 'applyChanges', 'rejectChanges', 'grantAccess', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
   member: ['myGroups', 'requestAccess', 'withdrawRequest'],
   auditor: ['auditorBootstrap', 'queryAudit', 'auditFilterOptions', 'exportAudit'],
 };
 // First-run tutorial: available on every surface.
 for (const list of Object.values(ALLOWED)) list.push('tutorialState', 'markTutorialSeen');
 // Mirrors READS in src/index.js: the resolvers that keep working while changes are paused.
-const READS = new Set(['bootstrap', 'checkName', 'accessMatrix', 'getGroup', 'getMembers', 'searchUsers', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'queryAudit', 'auditFilterOptions', 'exportAudit', 'tutorialState', 'myGroups', 'auditorBootstrap', 'adminBootstrap', 'exportData', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup', 'listChanges', 'grantAccess']);
+const READS = new Set(['bootstrap', 'listRoles', 'searchRoleGroups', 'checkName', 'accessMatrix', 'getGroup', 'getMembers', 'searchUsers', 'resolveUsers', 'exportMembers', 'getUsage', 'listRequests', 'queryAudit', 'auditFilterOptions', 'exportAudit', 'tutorialState', 'myGroups', 'auditorBootstrap', 'adminBootstrap', 'exportData', 'searchGroups', 'searchProjects', 'previewDeactivatedCleanup', 'listChanges', 'grantAccess']);
 const STATUS_URL = 'https://superapps.statuspage.io';
 const MODULES = { project: 'gum-project-settings', admin: 'gum-admin-page', member: 'gum-my-groups', auditor: 'gum-audit' };
 
@@ -90,18 +89,15 @@ export function createDemoBackend() {
   if (params.get('governance') !== 'off') addGovernanceDemo(seed);
   const ai = params.get('ai');
   if (ai === 'on' || ai === 'stopped') seed.store.config = { ...seed.store.config, aiEnabled: true };
-  const orgConfigured = params.get('org') !== 'off';
-  const mode = ['jiraAdmin', 'org'].includes(params.get('mode')) ? params.get('mode') : null;
-  if (mode) seed.store.config = { ...seed.store.config, groupChanges: mode };
-  const jiraAdminMode = mode === 'jiraAdmin' || (!mode && !orgConfigured) || (mode === 'org' && !orgConfigured);
-  if (jiraAdminMode && params.get('changes') !== 'off') addChangesDemo(seed);
+  if (params.get('changes') !== 'off') addChangesDemo(seed);
+  // The click-dummy shows a site that is already set up; ?setup=new shows the first-run checklist.
+  if (params.get('setup') !== 'new') seed.store.setup = { dismissedAt: Date.now() - 30 * 24 * 60 * 60 * 1000, mode: 'review', announcedAt: Date.now() - 30 * 24 * 60 * 60 * 1000 };
+  if (params.get('auto') === 'on') seed.store['privileged-admin'] = { accountId: 'u-admin', displayName: 'Dominik Admin', setAt: Date.now() - 6 * 24 * 60 * 60 * 1000 };
   // ?as=projectAdmin: the demo user is a project admin only (project page); the admin page keeps the Jira admin.
   const asProjectAdmin = params.get('as') === 'projectAdmin';
   const jiraUser = memoryJiraUser(seed.jira, { needsConsent: params.get('consent') === 'needed' ? ['u-me'] : [] });
   const service = createService({
     jira: memoryJira(seed.jira),
-    // ?org=off simulates a site that has not stored its organization connection yet.
-    org: memoryOrg(seed.jira, { configured: orgConfigured }),
     jiraUser,
     // ?confluence=off simulates a site where the app is not installed in Confluence.
     confluence: memoryConfluence(seed.jira, { available: params.get('confluence') !== 'off' }),

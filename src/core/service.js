@@ -13,10 +13,10 @@
  * The project and account ids always come from the trusted Forge context, never
  * from the payload.
  *
- * How group writes run (setting "groupChanges", see modeOf): in Jira-admin mode a Jira administrator's change runs
- * through Jira REST as that user (asUser, injected as jiraUser); a project admin's change becomes a pending change
- * (KVS change:<projectId>:<id>) that a Jira admin applies or rejects later. In organization mode every write runs
- * through the Organization Admin API connection (injected as org), as before.
+ * How group writes run: a Jira administrator's change runs through Jira REST as that user (asUser, injected as
+ * jiraUser); a project admin's change becomes a pending change (KVS change:<projectId>:<id>) that a Jira admin applies
+ * or rejects later. The app never collects or stores organization API keys (Atlassian Marketplace requirement); a key
+ * stored by an earlier version is deleted on install/upgrade (purgeLegacyOrgConnection).
  *
  * @file        src/core/service.js
  * @app         Group Self-Service for Jira
@@ -67,12 +67,16 @@ export const AuditActions = {
   CHANGE_APPLIED: 'CHANGE_APPLIED',
   CHANGE_REJECTED: 'CHANGE_REJECTED',
   CHANGE_WITHDRAWN: 'CHANGE_WITHDRAWN',
+  // Project roles: people added to or removed from a role of the project, by its project admin with their own rights.
+  ROLE_MEMBER_ADDED: 'ROLE_MEMBER_ADDED',
+  ROLE_MEMBER_REMOVED: 'ROLE_MEMBER_REMOVED',
 };
 
-// How group changes are made: 'jiraAdmin' = Jira admins apply them as themselves (asUser), project admins' changes
-// wait for them; 'org' = everything through the organization connection. Deliberately not in DEFAULT_CONFIG: an
-// installation that never saved it is resolved by modeOf.
-export const GROUP_CHANGE_MODES = ['jiraAdmin', 'org'];
+// Jira's internal role for apps: never shown or changed.
+const HIDDEN_ROLES = ['atlassian-addons-project-access'];
+
+// Forge secret in which versions up to 3.17 could keep an organization API key ("organization connection").
+export const LEGACY_ORG_SECRET = 'org-connection';
 
 export const DEFAULT_CONFIG = Object.freeze({
   retentionMonths: null, // null = never delete (default)
@@ -95,6 +99,9 @@ export const DEFAULT_CONFIG = Object.freeze({
   // AI features (the Rovo agent) are off until a Jira admin turns them on (EULA §8.4). Installations without a
   // stored value count as off.
   aiEnabled: false,
+  // Project roles tab: project admins add and remove people in their own project's roles, with their own Jira rights
+  // (Administer Projects). Jira admins can turn it off.
+  rolesEnabled: true,
   // TEST ONLY: account ids treated as project admins (not Jira admins) on the project page and in Rovo. Honoured only
   // when Forge reports the DEVELOPMENT environment (ctx.environmentType); ignored and hidden everywhere else.
   testProjectAdmins: [],
@@ -108,8 +115,7 @@ const USAGE_TTL = 10 * 60 * 1000;
 // Bumped when the shape of the usage checks changes; older cache entries are ignored.
 const USAGE_VERSION = 2;
 const MEMBER_SCAN_CAP = 5000;
-// Jira learns about groups created through the Organization API with a delay and
-// can briefly answer "does not exist" (seen live on superportdev). A group is
+// Jira can learn about a newly created group with a delay and briefly answer "does not exist" (seen live on superportdev). A group is
 // only forgotten after Jira has reported it missing for this long.
 const MISSING_GRACE = 24 * 60 * 60 * 1000;
 const FRESH_GROUP = 30 * 60 * 1000;
@@ -131,7 +137,7 @@ const SCOPE_GUARDS = ['block', 'warn'];
 // Re-adding what this admin just removed restores earlier access; not a widening.
 const SCOPE_EXEMPT_REASONS = ['undo', 'retry'];
 // Errors after which further writes in the same batch are pointless: no consent yet, or not a Jira admin.
-const STOP_CODES = [ErrorCodes.USER_CONSENT_REQUIRED, ErrorCodes.JIRA_ADMIN_REQUIRED];
+const STOP_CODES = [ErrorCodes.USER_CONSENT_REQUIRED, ErrorCodes.JIRA_ADMIN_REQUIRED, ErrorCodes.PRIVILEGED_ADMIN_UNAVAILABLE];
 const MAX_CHANGE_BATCH = 100;
 const MAX_TEST_ACCOUNTS = 20;
 // Decided pending changes stay visible this long (queue history, the requester's status); the hourly job then drops them.
@@ -149,6 +155,11 @@ const keys = {
   tutorial: (accountId) => `tutorial:${accountId}`,
   change: (projectId, id) => `change:${projectId}:${id}`,
   changePrefix: (projectId) => `change:${projectId}:`,
+  // Automatic changes: the Jira admin whose account applies project admins' changes. Deliberately NOT exported or
+  // imported (not in TRANSFER_PREFIXES): acting for an account needs that admin's own decision on each installation.
+  privileged: 'privileged-admin',
+  // First-run setup checklist on the admin page (per installation, not exported: a new site sets itself up).
+  setup: 'setup',
 };
 
 const TUTORIAL_SURFACES = ['project', 'member', 'admin', 'auditor'];
@@ -157,27 +168,12 @@ function fold(s) {
   return (s ?? '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
-export function createService({ jira, org = null, jiraUser = null, confluence = null, store, audit, now = () => Date.now(), uuid = () => crypto.randomUUID(), env = globalThis.process?.env ?? {} }) {
+export function createService({ jira, secrets = null, jiraUser = null, confluence = null, store, audit, now = () => Date.now(), uuid = () => crypto.randomUUID(), env = globalThis.process?.env ?? {} }) {
   // ---------------------------------------------------------------- helpers
 
   // Group writes (create group, add/remove members): Atlassian rejects them from the app user via the Jira REST API
-  // (verified on superportdev). They run either as the signed-in Jira admin (Jira REST asUser, Jira-admin mode) or
-  // through the site's own organization connection (organization mode). Reads keep using the Jira REST API as the app.
-  async function orgReady() {
-    return Boolean(org && (await org.isConfigured()));
-  }
-
-  /**
-   * The mode an installation runs in. selected: what the Jira admin chose; installations that never saved it keep
-   * 'org' when they already have an organization connection (no surprise change on upgrade), all others get
-   * 'jiraAdmin'. effective: 'org' only when it is selected AND connected; otherwise 'jiraAdmin'.
-   */
-  async function modeOf(config) {
-    const orgConfigured = await orgReady();
-    const stored = GROUP_CHANGE_MODES.includes(config?.groupChanges);
-    const selected = stored ? config.groupChanges : orgConfigured ? 'org' : 'jiraAdmin';
-    return { selected, effective: selected === 'org' && orgConfigured ? 'org' : 'jiraAdmin', orgConfigured, stored };
-  }
+  // (verified on superportdev). They run as the signed-in Jira admin (Jira REST asUser); a project admin's change waits
+  // for a Jira admin. Reads keep using the Jira REST API as the app.
 
   // Jira REST as the calling user. Only ever handed out for callers whose permissions say "Jira admin" (writePlan,
   // applyChanges); `as` lets the in-memory backend simulate Jira's 403 for anyone else.
@@ -192,19 +188,197 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
     };
   }
 
-  // How a write of this caller runs: directly with a writer, or as a pending change for a Jira admin.
-  async function writePlan(ctx, perms, config) {
-    const mode = await modeOf(config ?? (await getConfig()));
-    if (mode.effective === 'org') return { pending: false, writer: org, mode };
-    if (perms?.jiraAdmin) return { pending: false, writer: userWriter(ctx), mode };
-    return { pending: true, mode };
+  // How a write of this caller runs: a Jira admin writes with their own rights; a project admin's write runs at once
+  // with the privileged admin's account when automatic changes are on, otherwise it waits for a Jira admin.
+  async function writePlan(ctx, perms) {
+    if (perms?.jiraAdmin) return { pending: false, writer: userWriter(ctx) };
+    const writer = await privilegedWriter(ctx);
+    if (writer) return { pending: false, writer };
+    return { pending: true };
   }
 
-  // The writer a Jira admin uses to apply pending changes: the organization connection in organization mode,
-  // otherwise their own Jira rights.
-  async function applierWriter(ctx, config) {
-    const mode = await modeOf(config);
-    return mode.effective === 'org' ? org : userWriter(ctx);
+  async function changeModeOf(ctx, perms) {
+    if (perms?.jiraAdmin) return { effective: 'jiraAdmin', writes: 'direct' };
+    const writer = await privilegedWriter(ctx);
+    if (writer) return { effective: 'automatic', writes: 'direct', appliedAs: writer.appliedAs.displayName };
+    return { effective: 'jiraAdmin', writes: 'pending' };
+  }
+
+  // ---------------------------------------------------------------- automatic changes (privileged admin)
+  //
+  // Like CSUM's "privileged user": a Jira admin lets the app apply project admins' group changes and the scheduled
+  // removals (end dates, deactivated accounts) at once, with that admin's account (Forge offline impersonation,
+  // asUser(accountId); manage:jira-configuration allows impersonation in manifest.yml). Only a Jira admin can switch
+  // it on, and only for themselves; any Jira admin can switch it off. No credentials are stored, only the account id.
+  // Before each use the app checks that the account is still an active Jira admin, and Jira checks that admin's
+  // rights on every call. If that fails, automatic changes pause (recorded and shown on the admin page) and changes
+  // wait for a Jira admin again until a Jira admin switches it on again. Every write keeps the scope checks of the
+  // project admin's own request and is logged with the project admin as actor and "applied as" the privileged admin.
+
+  async function privilegedRecord() {
+    return (await store.get(keys.privileged)) ?? null;
+  }
+
+  function publicPrivileged(rec) {
+    if (!rec?.accountId) return { on: false, paused: false };
+    return {
+      on: !rec.pausedAt,
+      paused: Boolean(rec.pausedAt),
+      accountId: rec.accountId,
+      displayName: rec.displayName,
+      setAt: rec.setAt ?? null,
+      pausedAt: rec.pausedAt ?? null,
+      pausedReason: rec.pausedReason ?? null,
+    };
+  }
+
+  async function pausePrivileged(rec, reason) {
+    const current = await privilegedRecord();
+    if (!current || current.accountId !== rec.accountId || current.pausedAt) return;
+    await store.set(keys.privileged, { ...current, pausedAt: now(), pausedReason: reason });
+    console.warn('Automatic changes paused', reason);
+    await writeAudit({
+      action: AuditActions.CONFIG_CHANGED,
+      projectId: '*',
+      actorName: 'system',
+      details: { changed: ['privilegedAdmin'], privilegedAdmin: 'paused', reason, appliedAs: rec.displayName },
+    });
+  }
+
+  // The writer that acts as the privileged admin, or null (automatic changes off or paused, or the account can no
+  // longer apply changes). `cache` (the invocation's ctx, or an object per scheduled run) keeps one check per run.
+  async function privilegedWriter(cache) {
+    const memo = cache ?? {};
+    if ('_privileged' in memo) return memo._privileged;
+    memo._privileged = null;
+    if (!jiraUser) return null;
+    const rec = await privilegedRecord();
+    if (!rec?.accountId || rec.pausedAt) return null;
+    const [perms, user] = await Promise.all([jira.checkPermissions(rec.accountId, null).catch(() => null), jira.getUser(rec.accountId).catch(() => null)]);
+    if (!perms) return null; // Jira did not answer: wait this time, check again next time
+    if (!perms.jiraAdmin || user?.active === false) {
+      await pausePrivileged(rec, user?.active === false ? 'INACTIVE' : 'NOT_ADMIN');
+      return null;
+    }
+    const as = { accountId: rec.accountId, impersonate: true };
+    const appliedAs = { accountId: rec.accountId, displayName: user?.displayName ?? rec.displayName };
+    const guard = (fn) => async (...args) => {
+      try {
+        return await fn(...args);
+      } catch (err) {
+        if (err?.code !== ErrorCodes.USER_CONSENT_REQUIRED && err?.code !== ErrorCodes.JIRA_ADMIN_REQUIRED) throw err;
+        const reason = err.code === ErrorCodes.USER_CONSENT_REQUIRED ? 'ADMIN_CONSENT' : 'NOT_ADMIN'; // not 'CONSENT': that is the caller's own
+        await pausePrivileged(rec, reason);
+        memo._privileged = null;
+        throw new AppError(ErrorCodes.PRIVILEGED_ADMIN_UNAVAILABLE, 'Automatic changes are paused; changes wait for a Jira admin again', { reason });
+      }
+    };
+    memo._privileged = {
+      kind: 'privileged',
+      appliedAs,
+      createGroup: guard((name) => jiraUser.createGroup(name, as)),
+      addMember: guard((groupId, accountId) => jiraUser.addMember(groupId, accountId, as)),
+      removeMember: guard((groupId, accountId) => jiraUser.removeMember(groupId, accountId, as)),
+    };
+    return memo._privileged;
+  }
+
+  // Audit details of a write: notes the privileged admin's account when the write ran with it.
+  function withAppliedAs(writer, details) {
+    if (writer?.kind !== 'privileged') return details;
+    return { ...(details ?? {}), appliedAs: writer.appliedAs.displayName };
+  }
+
+  // ---------------------------------------------------------------- first-run setup (admin page)
+  //
+  // Three steps a Jira admin does once on a new site; everything else has safe defaults. 1. allow access (Forge
+  // consent for writes as yourself), 2. choose how project admins' changes apply (automatic with your account, or you
+  // review them), 3. tell project admins where the app is. The checklist hides itself once dismissed.
+
+  async function hasConsent(ctx) {
+    if (!jiraUser?.requestConsent) return true;
+    try {
+      await jiraUser.requestConsent({ accountId: ctx.accountId });
+      return true;
+    } catch (err) {
+      if (err?.name === 'NEEDS_AUTHENTICATION_ERR' || err?.code === ErrorCodes.USER_CONSENT_REQUIRED) return false;
+      return null; // unknown: the step stays open with its button
+    }
+  }
+
+  async function setupStatus(ctx) {
+    const setup = (await store.get(keys.setup)) ?? {};
+    const privileged = await privilegedRecord();
+    const status = {
+      dismissed: Boolean(setup.dismissedAt),
+      mode: privileged?.accountId && !privileged.pausedAt ? 'automatic' : setup.mode === 'review' ? 'review' : null,
+      announced: Boolean(setup.announcedAt),
+    };
+    status.access = status.dismissed ? true : await hasConsent(ctx);
+    status.complete = status.access === true && Boolean(status.mode) && status.announced;
+    return status;
+  }
+
+  const SETUP_STEPS = ['review', 'announced', 'dismiss', 'reopen'];
+
+  async function updateSetup(ctx, { step } = {}) {
+    await requireJiraAdmin(ctx);
+    if (!SETUP_STEPS.includes(step)) throw new AppError(ErrorCodes.BAD_REQUEST, 'Unknown setup step');
+    const actor = await actorOf(ctx);
+    const setup = (await store.get(keys.setup)) ?? {};
+    const by = { accountId: actor.accountId, displayName: actor.displayName };
+    if (step === 'review') Object.assign(setup, { mode: 'review', modeAt: now(), modeBy: by });
+    if (step === 'announced') Object.assign(setup, { announcedAt: now(), announcedBy: by });
+    if (step === 'dismiss') Object.assign(setup, { dismissedAt: now(), dismissedBy: by });
+    if (step === 'reopen') delete setup.dismissedAt;
+    await store.set(keys.setup, setup);
+    return { setup: await setupStatus(ctx) };
+  }
+
+  async function setPrivilegedAdmin(ctx) {
+    await requireJiraAdmin(ctx);
+    if (!jiraUser?.checkImpersonation) throw new AppError(ErrorCodes.JIRA_ERROR, 'Automatic changes are not available here');
+    try {
+      const me = await jiraUser.checkImpersonation({ accountId: ctx.accountId });
+      if (me?.accountId && me.accountId !== ctx.accountId) throw new Error('Jira answered for another account');
+    } catch (err) {
+      if (err?.code === ErrorCodes.USER_CONSENT_REQUIRED) throw err; // "Grant access" first
+      console.warn('Impersonation check failed', err?.name, err?.code, err?.status, err?.message);
+      throw new AppError(ErrorCodes.PRIVILEGED_ADMIN_UNAVAILABLE, 'Jira did not let the app act for your account', { reason: 'IMPERSONATION', jira: err?.message ?? String(err) });
+    }
+    const actor = await actorOf(ctx);
+    const before = await privilegedRecord();
+    const rec = { accountId: actor.accountId, displayName: actor.displayName, setAt: now() };
+    await store.set(keys.privileged, rec);
+    await writeAudit({
+      action: AuditActions.CONFIG_CHANGED,
+      projectId: '*',
+      actorAccountId: actor.accountId,
+      actorName: actor.displayName,
+      details: { changed: ['privilegedAdmin'], privilegedAdmin: 'on', appliedAs: actor.displayName, ...(before?.accountId && before.accountId !== actor.accountId ? { replaced: before.displayName } : {}) },
+    });
+    return { privileged: publicPrivileged(rec) };
+  }
+
+  async function clearPrivilegedAdmin(ctx) {
+    await requireJiraAdmin(ctx);
+    const before = await privilegedRecord();
+    if (!before) return { privileged: publicPrivileged(null) };
+    await store.delete(keys.privileged);
+    const actor = await actorOf(ctx);
+    await writeAudit({
+      action: AuditActions.CONFIG_CHANGED,
+      projectId: '*',
+      actorAccountId: actor.accountId,
+      actorName: actor.displayName,
+      details: { changed: ['privilegedAdmin'], privilegedAdmin: 'off', appliedAs: before.displayName },
+    });
+    return { privileged: publicPrivileged(null) };
+  }
+
+  // The writer a Jira admin uses to apply pending changes: their own Jira rights.
+  async function applierWriter(ctx) {
+    return userWriter(ctx);
   }
 
   const isDevelopment = (ctx) => ctx?.environmentType === 'DEVELOPMENT';
@@ -397,7 +571,7 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
       actorAccountId: actor.accountId,
       actorName: actor.displayName,
       // The end date goes along, so an undo from anywhere (app or Rovo) restores it.
-      details: previousExpiry ? { ...(details ?? {}), previousExpiry } : details,
+      details: withAppliedAs(writer, previousExpiry ? { ...(details ?? {}), previousExpiry } : details),
     });
     return { accountId, displayName, previousExpiry };
   }
@@ -628,6 +802,46 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
     return { queued: true, change };
   }
 
+  // A scheduled removal (end date reached, deactivated account): at once with the privileged admin's account when
+  // automatic changes are on, otherwise a pending removal for a Jira admin. A removal that already waits for a Jira
+  // admin stays in the queue. Returns { status: 'removed' | 'queued' | 'waiting' | 'gone' | 'failed', change? }.
+  async function scheduledRemoval(cache, { groupRec, accountId, displayName, reason, endedAt = null, auditDetails = {} }) {
+    const open = await changesOf(groupRec.projectId);
+    const existing = openMembershipChange(open, groupRec.groupId, accountId, 'remove');
+    if (existing) return { status: 'waiting', change: existing };
+    if (reason === 'deactivated' && open.some((c) => c.status === 'rejected' && c.type === 'remove' && c.reason === 'deactivated' && c.groupId === groupRec.groupId && c.accountId === accountId)) {
+      return { status: 'waiting', change: null }; // a Jira admin decided to keep this account
+    }
+    const writer = await privilegedWriter(cache);
+    if (writer) {
+      try {
+        await writer.removeMember(groupRec.groupId, accountId, groupRec.name);
+        const project = await store.get(keys.project(groupRec.projectId));
+        await writeAudit({
+          action: reason === 'expiry' ? AuditActions.MEMBER_EXPIRED : AuditActions.MEMBER_AUTO_REMOVED,
+          projectId: groupRec.projectId,
+          projectKey: project?.key ?? null,
+          groupId: groupRec.groupId,
+          groupName: groupRec.name,
+          targetAccountId: accountId,
+          targetName: displayName,
+          actorName: 'system',
+          details: withAppliedAs(writer, auditDetails),
+        });
+        return { status: 'removed' };
+      } catch (err) {
+        if (err?.code === 'NOT_MEMBER' || err?.code === ErrorCodes.GROUP_NOT_FOUND) return { status: 'gone' };
+        if (err?.code !== ErrorCodes.PRIVILEGED_ADMIN_UNAVAILABLE) {
+          console.warn('Scheduled removal failed, retrying next run', groupRec.groupId, err?.code, err?.message);
+          return { status: 'failed' };
+        }
+        // Automatic changes just paused: this removal waits for a Jira admin like the rest.
+      }
+    }
+    const res = await queueSystemRemoval({ groupRec, accountId, displayName, reason, endedAt });
+    return { status: res.queued ? 'queued' : 'waiting', change: res.change };
+  }
+
   function addMonths(ts, months) {
     const d = new Date(ts);
     d.setUTCMonth(d.getUTCMonth() + months);
@@ -761,14 +975,10 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
           } catch (err) {
             if (err?.code === ErrorCodes.GROUP_NOT_FOUND) {
               // Deleted natively in Atlassian Administration, or not yet known to
-              // Jira. A group older than a few minutes that the organization's
-              // directory does not know either is gone at once; otherwise it is
-              // forgotten only after it stayed missing for the grace period.
+              // Jira: forgotten only after it stayed missing for the grace period.
               const missingSince = g.missingSince ?? now();
               const fresh = g.createdAt && now() - g.createdAt < MISSING_GRACE;
-              const settled = !g.createdAt || now() - g.createdAt >= FRESH_GROUP;
-              const deleted = settled && (await orgReady()) && (await org.groupExists(g.groupId, g.name).catch(() => true)) === false;
-              if (deleted || (!fresh && now() - missingSince >= MISSING_GRACE)) {
+              if (!fresh && now() - missingSince >= MISSING_GRACE) {
                 gone.push(g.groupId);
                 return null;
               }
@@ -788,19 +998,22 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
     }
 
     groups.sort((a, b) => a.namePart.localeCompare(b.namePart));
-    const mode = await modeOf(config);
     const changes = await changesOf(project.id);
     const openChanges = changes.filter(isPending);
     return {
       project: { id: project.id, key: project.key, name: project.name, avatarUrl: project.avatarUrl ?? null, previousKeys: record.previousKeys ?? [] },
       user: { accountId: actor.accountId, displayName: actor.displayName, isJiraAdmin: Boolean(perms.jiraAdmin), testProjectAdmin: Boolean(perms.testProjectAdmin) },
       // How this caller's group changes run: 'direct' (applied at once) or 'pending' (a Jira admin applies them).
-      changeMode: { effective: mode.effective, writes: mode.effective === 'org' || perms.jiraAdmin ? 'direct' : 'pending' },
+      // effective 'automatic': a project admin's changes apply at once with the privileged admin's account.
+      changeMode: await changeModeOf(ctx, perms),
       changes: {
         pending: openChanges.length,
         mine: openChanges.filter((c) => c.requestedBy?.accountId === actor.accountId).length,
         canApply: Boolean(perms.jiraAdmin),
+        // Jira admins: everything that waits for a Jira admin, across all projects (the admin page has the full queue).
+        ...(perms.jiraAdmin ? { pendingAll: (await changesOf(null)).filter(isPending).length } : {}),
       },
+      rolesEnabled: config.rolesEnabled !== false,
       // New groups a project admin asked for that wait for a Jira admin.
       pendingGroups: openChanges
         .filter((c) => c.type === 'create')
@@ -939,7 +1152,7 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
     await store.set(keys.project(project.id), record);
 
     if (!before?.createdAt) {
-      const details = { ...(groupRec.description ? { description: groupRec.description } : {}), ...auditExtra };
+      const details = withAppliedAs(writer, { ...(groupRec.description ? { description: groupRec.description } : {}), ...auditExtra });
       await writeAudit({
         action: AuditActions.GROUP_CREATED,
         projectId: project.id,
@@ -965,7 +1178,7 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
         }
         added.push(m);
         if (already) continue;
-        const details = { ...(m.reason === 'copy' ? { reason: 'copy', from: copyFromName } : {}), ...auditExtra };
+        const details = withAppliedAs(writer, { ...(m.reason === 'copy' ? { reason: 'copy', from: copyFromName } : {}), ...auditExtra });
         await writeAudit({
           action: AuditActions.MEMBER_ADDED,
           projectId: project.id,
@@ -990,16 +1203,7 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
   async function getGroup(ctx, { groupId } = {}) {
     const loaded = await loadOwnedGroup(ctx, groupId);
     const { record, config } = loaded;
-    let { groupRec } = loaded;
-    // With the Organization API available, its externalSynced / modifiable flags
-    // are the authoritative IdP signal.
-    if (!groupRec.idpManaged && (await orgReady())) {
-      const meta = await org.getGroupMeta(groupId, groupRec.name).catch(() => null);
-      if (meta && (meta.externalSynced || !meta.modifiable)) {
-        groupRec = { ...groupRec, idpManaged: true };
-        await store.set(keys.group(groupId), groupRec);
-      }
-    }
+    const { groupRec } = loaded;
     const [memberCount, recent] = await Promise.all([
       jira.countMembers(groupId).catch(() => null),
       audit.query({ groupId, offset: 0, limit: 5 }),
@@ -1007,8 +1211,8 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
     return { ...summarize(groupRec, record, config, { memberCount }), recentChanges: recent.entries };
   }
 
-  // The description is the app's own text for the group (the Organization API
-  // has no endpoint to change it). Allowed for every group the caller owns.
+  // The description is the app's own text for the group (Jira groups have no
+  // description field). Allowed for every group the caller owns.
   async function updateDescription(ctx, { groupId, description = '', reason = null } = {}) {
     const { project, groupRec } = await loadOwnedGroup(ctx, groupId);
     assertLicensed(ctx);
@@ -1139,7 +1343,7 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
           targetName: base.displayName,
           actorAccountId: actor.accountId,
           actorName: actor.displayName,
-          details: reasonDetails(reason, ADD_REASONS, expiry ? { expiresAt: expiry } : {}),
+          details: withAppliedAs(writer, reasonDetails(reason, ADD_REASONS, expiry ? { expiresAt: expiry } : {})),
         });
         results.push({ ...base, status: 'added', expiresAt: expiry, addedAt: now(), addedBy: actor.displayName });
       } catch (err) {
@@ -1793,39 +1997,225 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
   async function runAutomation() {
     const config = await getConfig();
     if (!config.autoRemoveDeactivated) return { removed: 0, skipped: 'disabled' };
-    const mode = await modeOf(config);
-    if (mode.effective === 'jiraAdmin') {
-      // Scheduled jobs have no signed-in user, so they cannot write as a Jira admin: each removal waits for one.
-      let queued = 0;
-      for (const item of await deactivatedMembers()) {
-        const res = await queueSystemRemoval({ groupRec: { groupId: item.groupId, name: item.groupName, projectId: item.projectId }, accountId: item.accountId, displayName: item.displayName, reason: 'deactivated' });
-        if (res.queued) queued++;
-      }
-      return { removed: 0, queued };
-    }
+    // Removed at once with the privileged admin's account (automatic changes); otherwise each removal waits for a
+    // Jira admin, since a scheduled job has no signed-in user of its own.
+    const cache = {};
+    let queued = 0;
     let removed = 0;
     for (const item of await deactivatedMembers()) {
+      const res = await scheduledRemoval(cache, { groupRec: { groupId: item.groupId, name: item.groupName, projectId: item.projectId }, accountId: item.accountId, displayName: item.displayName, reason: 'deactivated', auditDetails: { reason: 'deactivated' } });
+      if (res.status === 'queued') queued++;
+      if (res.status === 'removed' || res.status === 'gone') await store.delete(keys.expiry(item.groupId, item.accountId));
+      if (res.status === 'removed') removed++;
+    }
+    return { removed, queued };
+  }
+
+  // ---------------------------------------------------------------- project roles
+
+  // Role changes run as the signed-in user (asUser): Jira allows them for the project's admins and for Jira admins,
+  // so nobody can do more here than in Jira's own project settings. They apply at once; no Jira admin is needed.
+  function roleWriter(ctx) {
+    if (!jiraUser?.addRoleActor) throw new AppError(ErrorCodes.JIRA_ERROR, 'Project roles are not available here');
+    const as = { accountId: ctx.accountId };
+    return {
+      add: (projectId, roleId, accountId) => jiraUser.addRoleActor(projectId, roleId, accountId, as),
+      remove: (projectId, roleId, accountId) => jiraUser.removeRoleActor(projectId, roleId, accountId, as),
+      addGroup: (projectId, roleId, groupId) => jiraUser.addRoleGroup(projectId, roleId, groupId, as),
+      removeGroup: (projectId, roleId, groupId) => jiraUser.removeRoleGroup(projectId, roleId, groupId, as),
+    };
+  }
+
+  async function requireRoles(ctx, { write = false } = {}) {
+    const base = await requireProjectAdmin(ctx);
+    if (base.config.rolesEnabled === false) throw new AppError(ErrorCodes.FORBIDDEN, 'Project roles are turned off by the Jira admin', { reason: 'ROLES_OFF' });
+    if (write) assertLicensed(ctx);
+    return base;
+  }
+
+  async function rolesOf(project) {
+    const roles = await jira.getProjectRoles(project.id);
+    return roles.filter((r) => !HIDDEN_ROLES.includes(r.name));
+  }
+
+  async function loadRole(project, roleId) {
+    const role = (await rolesOf(project)).find((r) => r.roleId === String(roleId ?? ''));
+    if (!role) throw new AppError(ErrorCodes.ROLE_NOT_FOUND, 'This role does not exist in the project');
+    return role;
+  }
+
+  // The roles of the caller's project with their people and groups, both changeable here. Groups this app manages for
+  // the project are marked so the UI can link to them; protected groups (admin, product access, the blocked list) are
+  // marked locked: only a Jira admin changes those, in Jira's own project settings.
+  async function listRoles(ctx) {
+    const { project, record, config } = await requireRoles(ctx);
+    const owned = new Set(record.groupIds ?? []);
+    const roles = await rolesOf(project);
+    return {
+      project: { id: project.id, key: project.key },
+      me: ctx.accountId,
+      roles: roles.map((r) => ({
+        roleId: r.roleId,
+        name: r.name,
+        description: r.description ?? '',
+        people: r.actors
+          .filter((a) => a.type === 'user')
+          .map((a) => ({ accountId: a.accountId, displayName: a.displayName ?? a.accountId, avatarUrl: a.avatarUrl ?? null }))
+          .sort((a, b) => (a.displayName ?? '').localeCompare(b.displayName ?? '')),
+        groups: r.actors
+          .filter((a) => a.type === 'group')
+          .map((a) => ({ groupId: a.groupId, name: a.name, managed: Boolean(a.groupId && owned.has(a.groupId)), locked: Boolean(blockingPattern(a.name ?? '', config)) }))
+          .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')),
+      })),
+    };
+  }
+
+  async function roleAudit(action, { project, role, actor, accountId, displayName, details = {} }) {
+    await writeAudit({
+      action,
+      projectId: project.id,
+      projectKey: project.key,
+      // Roles share the group columns of the audit log: id "role:<projectId>:<roleId>", name "<role> (project role)".
+      groupId: `role:${project.id}:${role.roleId}`,
+      groupName: `${role.name} (project role)`,
+      targetAccountId: accountId,
+      targetName: displayName,
+      actorAccountId: actor.accountId,
+      actorName: actor.displayName,
+      details: { kind: 'role', roleId: role.roleId, role: role.name, ...details },
+    });
+  }
+
+  // Adds people to a role of the caller's project, at once and with the caller's own Jira rights.
+  async function addRoleMembers(ctx, { roleId, accountIds = [], reason = null } = {}) {
+    const { project } = await requireRoles(ctx, { write: true });
+    const role = await loadRole(project, roleId);
+    const ids = [...new Set((Array.isArray(accountIds) ? accountIds : []).filter((id) => typeof id === 'string' && id))].slice(0, MAX_BULK_ADD);
+    if (!ids.length) throw new AppError(ErrorCodes.BAD_REQUEST, 'No users given');
+    const writer = roleWriter(ctx);
+    const actor = await actorOf(ctx);
+    const results = [];
+    let stop = null;
+    for (const accountId of ids) {
+      const user = await jira.getUser(accountId).catch(() => null);
+      const base = { accountId, displayName: user?.displayName ?? accountId, avatarUrl: user?.avatarUrl ?? null };
+      if (stop) {
+        results.push({ ...base, status: 'failed', code: stop.code, error: stop.message });
+        continue;
+      }
       try {
-        await org.removeMember(item.groupId, item.accountId, item.groupName);
-        await store.delete(keys.expiry(item.groupId, item.accountId));
-        const project = await store.get(keys.project(item.projectId));
-        await writeAudit({
-          action: AuditActions.MEMBER_AUTO_REMOVED,
-          projectId: item.projectId,
-          projectKey: project?.key ?? null,
-          groupId: item.groupId,
-          groupName: item.groupName,
-          targetAccountId: item.accountId,
-          targetName: item.displayName,
-          actorName: 'system',
-          details: { reason: 'deactivated' },
-        });
-        removed++;
+        await writer.add(project.id, role.roleId, accountId);
+        await roleAudit(AuditActions.ROLE_MEMBER_ADDED, { project, role, actor, accountId, displayName: base.displayName, details: reason === 'undo' ? { reason: 'undo' } : {} });
+        results.push({ ...base, status: 'added' });
       } catch (err) {
-        console.warn('Automatic removal failed', item.groupId, err?.message);
+        if (err?.code === 'ALREADY_MEMBER') results.push({ ...base, status: 'already' });
+        else {
+          results.push({ ...base, status: 'failed', code: err?.code ?? ErrorCodes.JIRA_ERROR, error: err?.message ?? String(err) });
+          // Consent missing or not allowed for this user: the rest would fail the same way.
+          if ([ErrorCodes.USER_CONSENT_REQUIRED, ErrorCodes.ROLE_FORBIDDEN, ErrorCodes.ROLE_NOT_FOUND].includes(err?.code)) stop = err;
+        }
       }
     }
-    return { removed };
+    return { role: { roleId: role.roleId, name: role.name }, results, consentRequired: stop?.code === ErrorCodes.USER_CONSENT_REQUIRED };
+  }
+
+  // Groups for the "Add group" field of a role: this project's own groups first, protected groups left out.
+  // Without a query it suggests the project's own groups.
+  async function searchRoleGroups(ctx, { query = '' } = {}) {
+    const { record, config } = await requireRoles(ctx);
+    const q = String(query ?? '').trim().slice(0, 100);
+    const owned = new Set(record.groupIds ?? []);
+    let found;
+    if (q.length >= 2) {
+      found = await jira.searchGroups(q, 30);
+    } else {
+      found = (await Promise.all((record.groupIds ?? []).map((id) => store.get(keys.group(id))))).filter(Boolean).map((g) => ({ groupId: g.groupId, name: g.name }));
+    }
+    const groups = found
+      .filter((g) => g?.groupId && g.name && !blockingPattern(g.name, config))
+      .map((g) => ({ groupId: g.groupId, name: g.name, own: owned.has(g.groupId) }))
+      .sort((a, b) => Number(b.own) - Number(a.own) || a.name.localeCompare(b.name))
+      .slice(0, 20);
+    return { groups };
+  }
+
+  // Adds groups to a role of the caller's project, at once and with the caller's own Jira rights (as in Jira's project
+  // settings). Protected groups are refused; a Jira admin adds those in Jira itself.
+  async function addRoleGroups(ctx, { roleId, groupIds = [], reason = null } = {}) {
+    const { project, config } = await requireRoles(ctx, { write: true });
+    const role = await loadRole(project, roleId);
+    const ids = [...new Set((Array.isArray(groupIds) ? groupIds : []).filter((id) => typeof id === 'string' && id))].slice(0, 20);
+    if (!ids.length) throw new AppError(ErrorCodes.BAD_REQUEST, 'No groups given');
+    const writer = roleWriter(ctx);
+    const actor = await actorOf(ctx);
+    const results = [];
+    let stop = null;
+    for (const groupId of ids) {
+      const group = await jira.getGroup(groupId).catch(() => null);
+      const base = { groupId, name: group?.name ?? groupId };
+      if (!group) {
+        results.push({ ...base, status: 'failed', code: ErrorCodes.GROUP_NOT_FOUND, error: 'Group not found' });
+        continue;
+      }
+      if (blockingPattern(group.name, config)) {
+        results.push({ ...base, status: 'failed', code: ErrorCodes.GROUP_BLOCKED, error: 'Protected group' });
+        continue;
+      }
+      if (stop) {
+        results.push({ ...base, status: 'failed', code: stop.code, error: stop.message });
+        continue;
+      }
+      try {
+        await writer.addGroup(project.id, role.roleId, groupId);
+        await roleAudit(AuditActions.ROLE_MEMBER_ADDED, { project, role, actor, accountId: null, displayName: group.name, details: { actorType: 'group', actorGroupId: groupId, ...(reason === 'undo' ? { reason: 'undo' } : {}) } });
+        results.push({ ...base, status: 'added' });
+      } catch (err) {
+        if (err?.code === 'ALREADY_MEMBER') results.push({ ...base, status: 'already' });
+        else {
+          results.push({ ...base, status: 'failed', code: err?.code ?? ErrorCodes.JIRA_ERROR, error: err?.message ?? String(err) });
+          if ([ErrorCodes.USER_CONSENT_REQUIRED, ErrorCodes.ROLE_FORBIDDEN, ErrorCodes.ROLE_NOT_FOUND].includes(err?.code)) stop = err;
+        }
+      }
+    }
+    return { role: { roleId: role.roleId, name: role.name }, results, consentRequired: stop?.code === ErrorCodes.USER_CONSENT_REQUIRED };
+  }
+
+  // Removes a group from a role. Protected groups stay (a Jira admin changes those in Jira).
+  async function removeRoleGroup(ctx, { roleId, groupId, reason = null } = {}) {
+    const { project, config } = await requireRoles(ctx, { write: true });
+    if (!groupId || typeof groupId !== 'string') throw new AppError(ErrorCodes.BAD_REQUEST, 'groupId missing');
+    const role = await loadRole(project, roleId);
+    const inRole = role.actors.find((a) => a.type === 'group' && a.groupId === groupId);
+    const name = inRole?.name ?? (await jira.getGroup(groupId).catch(() => null))?.name ?? groupId;
+    if (blockingPattern(name, config)) throw new AppError(ErrorCodes.GROUP_BLOCKED, 'Protected groups are changed by a Jira admin in Jira', { reason: 'ROLE_GROUP_LOCKED' });
+    const actor = await actorOf(ctx);
+    try {
+      await roleWriter(ctx).removeGroup(project.id, role.roleId, groupId);
+    } catch (err) {
+      if (err?.code === 'NOT_MEMBER') return { role: { roleId: role.roleId, name: role.name }, groupId, name, alreadyDone: true };
+      throw err;
+    }
+    await roleAudit(AuditActions.ROLE_MEMBER_REMOVED, { project, role, actor, accountId: null, displayName: name, details: { actorType: 'group', actorGroupId: groupId, ...(reason === 'undo' ? { reason: 'undo' } : {}) } });
+    return { role: { roleId: role.roleId, name: role.name }, groupId, name, alreadyDone: false };
+  }
+
+  // Removes one person from a role. Removing yourself is refused: it could take away your own project admin rights.
+  async function removeRoleMember(ctx, { roleId, accountId, reason = null } = {}) {
+    const { project } = await requireRoles(ctx, { write: true });
+    if (!accountId || typeof accountId !== 'string') throw new AppError(ErrorCodes.BAD_REQUEST, 'accountId missing');
+    if (accountId === ctx.accountId) throw new AppError(ErrorCodes.BAD_REQUEST, 'You cannot remove yourself from a role', { reason: 'SELF' });
+    const role = await loadRole(project, roleId);
+    const user = await jira.getUser(accountId).catch(() => null);
+    const displayName = user?.displayName ?? accountId;
+    const actor = await actorOf(ctx);
+    try {
+      await roleWriter(ctx).remove(project.id, role.roleId, accountId);
+    } catch (err) {
+      if (err?.code === 'NOT_MEMBER') return { role: { roleId: role.roleId, name: role.name }, accountId, displayName, alreadyDone: true };
+      throw err;
+    }
+    await roleAudit(AuditActions.ROLE_MEMBER_REMOVED, { project, role, actor, accountId, displayName, details: reason === 'undo' ? { reason: 'undo' } : {} });
+    return { role: { roleId: role.roleId, name: role.name }, accountId, displayName, alreadyDone: false };
   }
 
   // ---------------------------------------------------------------- compliance overview (Jira admins)
@@ -1903,8 +2293,7 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
     const recent = (c) => (c.decidedAt ?? c.requestedAt) >= since;
     const wanted = status === 'decided' ? (c) => !isPending(c) && recent(c) : status === 'all' ? (c) => isPending(c) || recent(c) : isPending;
     const list = all.filter((c) => (!groupId || c.groupId === groupId) && wanted(c));
-    const mode = await modeOf(await getConfig());
-    return { changes: list.slice(0, 500).map(publicChange), canApply, pendingCount: all.filter(isPending).length, mode: mode.effective, me: ctx.accountId };
+    return { changes: list.slice(0, 500).map(publicChange), canApply, pendingCount: all.filter(isPending).length, mode: 'jiraAdmin', me: ctx.accountId };
   }
 
   // Applies pending changes as the calling Jira admin. Idempotent: a change whose result is already in place
@@ -2172,9 +2561,10 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
 
   // ---------------------------------------------------------------- admin surface
 
-  // The configuration as the admin page sees it: the resolved mode, and the TEST ONLY list only in development.
-  function publicConfig(ctx, config, mode) {
-    const out = { ...config, groupChanges: mode.selected };
+  // The configuration as the admin page sees it: the TEST ONLY list only in development.
+  function publicConfig(ctx, config) {
+    const out = { ...config };
+    delete out.groupChanges; // setting of versions up to 3.17 (organization mode), no longer used
     if (!isDevelopment(ctx)) delete out.testProjectAdmins;
     return out;
   }
@@ -2183,78 +2573,46 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
     await requireJiraAdmin(ctx);
     const [config, actor, managed] = await Promise.all([getConfig(), actorOf(ctx), store.list('group:')]);
     const projects = new Set(managed.map((g) => g.value?.projectId).filter(Boolean));
-    const mode = await modeOf(config);
     return {
       user: { accountId: actor.accountId, displayName: actor.displayName, isJiraAdmin: true },
-      config: publicConfig(ctx, config, mode),
-      // selected = the setting, effective = what really happens (organization mode needs a connection).
-      changeMode: mode,
+      config: publicConfig(ctx, config),
       // The TEST ONLY switch exists only in Forge's development environment.
       development: isDevelopment(ctx),
       // SUPERPORT stopped the AI features for all sites (AI_BUDGET): the admin's own switch is kept but has no effect.
       aiStopped: vendorAiStop(env),
       defaults: { coreBlockedGroups: CORE_BLOCKED_GROUPS, productAccessPatterns: PRODUCT_ACCESS_PATTERNS },
       stats: { managedGroups: managed.length, projects: projects.size },
-      orgApi: org ? await org.status() : { configured: false },
       compliance: await complianceOverview(),
       confluence: { available: Boolean(confluence && (await confluence.isAvailable())) },
+      privileged: publicPrivileged(await privilegedRecord()),
+      setup: await setupStatus(ctx),
     };
   }
 
-  async function testOrgApi(ctx) {
-    await requireJiraAdmin(ctx);
-    if (!(await orgReady())) return { configured: false, ok: false };
-    try {
-      const res = await org.check();
-      return { configured: true, ok: Boolean(res.directoryId), directories: res.directories, directoryId: res.directoryId };
-    } catch (err) {
-      return { configured: true, ok: false, error: { code: err.code ?? ErrorCodes.ORG_API_ERROR, message: err.message } };
+  // Versions up to 3.17 could keep an organization API key (Forge secret LEGACY_ORG_SECRET) for an optional
+  // "organization connection". Atlassian does not allow Marketplace apps to collect organization API keys, so the app
+  // no longer reads it and deletes a stored key: on install/upgrade, and daily in case that trigger did not run.
+  // Idempotent; the removal is recorded in the audit log (no key material, only that it was removed).
+  async function purgeLegacyOrgConnection() {
+    if (!secrets) return { removed: false };
+    const stored = await secrets.get(LEGACY_ORG_SECRET).catch(() => null);
+    const config = await store.get(keys.config);
+    if (config && 'groupChanges' in config) {
+      const { groupChanges, ...rest } = config;
+      await store.set(keys.config, rest);
     }
-  }
-
-  // Stores this site's organization ID + API key (validated against Atlassian
-  // first). The key is never returned or logged; the audit entry names the org only.
-  // Connecting or disconnecting must not switch the mode by itself: an installation that never saved the setting keeps
-  // what it had (organization mode when it was connected, Jira-admin mode otherwise).
-  async function keepModeOnConnectionChange() {
-    const config = await getConfig();
-    const mode = await modeOf(config);
-    if (!mode.stored) await store.set(keys.config, { ...((await store.get(keys.config)) ?? {}), groupChanges: mode.selected });
-  }
-
-  async function saveOrgConnection(ctx, { orgId, apiKey, directoryId = null } = {}) {
-    await requireJiraAdmin(ctx);
-    if (!org) throw new AppError(ErrorCodes.ORG_API_NOT_CONFIGURED, 'No organization client');
-    const actor = await actorOf(ctx);
-    await keepModeOnConnectionChange();
-    const status = await org.connect({ orgId, apiKey, directoryId }, { accountId: actor.accountId, displayName: actor.displayName });
+    if (!stored) return { removed: false };
+    await secrets.delete(LEGACY_ORG_SECRET);
     await writeAudit({
       action: AuditActions.CONFIG_CHANGED,
       projectId: '*',
-      actorAccountId: actor.accountId,
-      actorName: actor.displayName,
-      details: { changed: ['orgConnection'], orgId: status.orgId, directoryId: status.directoryId },
+      actorName: 'system',
+      details: { changed: ['orgConnection'], removed: true, reason: 'unsupported' },
     });
-    return status;
+    return { removed: true };
   }
 
-  async function removeOrgConnection(ctx) {
-    await requireJiraAdmin(ctx);
-    if (!org) return { configured: false };
-    const actor = await actorOf(ctx);
-    await keepModeOnConnectionChange();
-    const status = await org.disconnect();
-    await writeAudit({
-      action: AuditActions.CONFIG_CHANGED,
-      projectId: '*',
-      actorAccountId: actor.accountId,
-      actorName: actor.displayName,
-      details: { changed: ['orgConnection'], removed: true },
-    });
-    return status;
-  }
-
-  function sanitizeConfig(input = {}, { mode = 'jiraAdmin', development = false, testProjectAdmins = [] } = {}) {
+  function sanitizeConfig(input = {}, { development = false, testProjectAdmins = [] } = {}) {
     input = input ?? {};
     const list = (v) => [...new Set((Array.isArray(v) ? v : []).map((s) => String(s).trim()).filter(Boolean))].slice(0, 500);
     const months = input.retentionMonths === null || input.retentionMonths === undefined ? null : Math.round(Number(input.retentionMonths));
@@ -2279,7 +2637,7 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
       autoRemoveDeactivated: input.autoRemoveDeactivated === true,
       scopeGuard: SCOPE_GUARDS.includes(input.scopeGuard) ? input.scopeGuard : 'block',
       aiEnabled: input.aiEnabled === true,
-      groupChanges: GROUP_CHANGE_MODES.includes(input.groupChanges) ? input.groupChanges : mode,
+      rolesEnabled: input.rolesEnabled !== false,
       // TEST ONLY: changeable only in the development environment; elsewhere the stored value is kept untouched.
       testProjectAdmins: development
         ? [...new Set((Array.isArray(input.testProjectAdmins) ? input.testProjectAdmins : []).map((v) => String(v).trim()).filter((v) => /^[A-Za-z0-9:_-]{1,128}$/.test(v)))].slice(0, MAX_TEST_ACCOUNTS)
@@ -2290,9 +2648,9 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
   async function saveConfig(ctx, { config, reason = null } = {}) {
     await requireJiraAdmin(ctx);
     const stored = await getConfig();
-    const modeBefore = await modeOf(stored);
-    const before = { ...stored, groupChanges: modeBefore.selected };
-    const options = { mode: modeBefore.selected, development: isDevelopment(ctx), testProjectAdmins: stored.testProjectAdmins ?? [] };
+    const before = { ...stored };
+    delete before.groupChanges;
+    const options = { development: isDevelopment(ctx), testProjectAdmins: stored.testProjectAdmins ?? [] };
     const next = sanitizeConfig(config, options);
     await store.set(keys.config, next);
     const changed = Object.keys(next).filter((k) => JSON.stringify(next[k]) !== JSON.stringify(before[k]));
@@ -2304,17 +2662,15 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
         actorAccountId: actor.accountId,
         actorName: actor.displayName,
         // The AI switch also records its new state (on/off), so the log shows who turned it on or off and when.
-        // The same for how group changes are made, and for the TEST ONLY list (development only).
+        // The same for the TEST ONLY list (development only).
         details: reasonDetails(reason, ['undo'], {
           changed,
           ...(changed.includes('aiEnabled') ? { aiEnabled: next.aiEnabled } : {}),
-          ...(changed.includes('groupChanges') ? { groupChanges: next.groupChanges } : {}),
           ...(changed.includes('testProjectAdmins') ? { testProjectAdmins: next.testProjectAdmins.length } : {}),
         }),
       });
     }
-    const modeAfter = await modeOf(next);
-    return { config: publicConfig(ctx, next, modeAfter), changed, previous: publicConfig(ctx, sanitizeConfig(before, options), modeBefore), changeMode: modeAfter };
+    return { config: publicConfig(ctx, next), changed, previous: publicConfig(ctx, sanitizeConfig(before, options)) };
   }
 
   // The Rovo actions ask this before anything else: AI features run only when a Jira admin turned them on.
@@ -2396,16 +2752,15 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
     return purged;
   }
 
-  // Hourly: removes memberships whose end date has passed, each with an audit entry.
-  // Records that can no longer apply (group gone, blocked or IdP-managed) are dropped.
-  // Jira-admin mode: a scheduled job has no signed-in user, so each ended membership becomes one pending removal
-  // ("Access ended on …") for a Jira admin; the end date stays until it is applied or rejected.
+  // Hourly: memberships whose end date has passed. With automatic changes on they are removed at once (with the
+  // privileged admin's account); otherwise each becomes one pending removal ("Access ended on …") for a Jira admin and
+  // the end date stays until it is applied or rejected. Records that can no longer apply (group gone, blocked or
+  // IdP-managed, person already out) are dropped.
   async function runExpiry() {
     const config = await getConfig();
-    const mode = await modeOf(config);
     const due = (await store.list('expiry:')).filter((r) => r.value?.expiresAt && r.value.expiresAt <= now());
-    const summary = { removed: 0, dropped: 0, failed: 0 };
-    if (mode.effective === 'jiraAdmin') summary.queued = 0;
+    const summary = { removed: 0, dropped: 0, failed: 0, queued: 0 };
+    const cache = {};
     for (const { key, value } of due) {
       const groupRec = await store.get(keys.group(value.groupId));
       if (!groupRec || blockingPattern(groupRec.name, config) || isIdpGroup(groupRec.name, groupRec, config)) {
@@ -2413,47 +2768,30 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
         summary.dropped++;
         continue;
       }
-      if (mode.effective === 'jiraAdmin') {
-        const groups = await jira.getUserGroups(value.accountId).catch(() => null);
-        if (groups && !groups.some((g) => g.groupId === value.groupId)) {
-          await store.delete(key); // already out of the group
-          summary.dropped++;
-          continue;
-        }
-        const user = await jira.getUser(value.accountId).catch(() => null);
-        const res = await queueSystemRemoval({ groupRec, accountId: value.accountId, displayName: user?.displayName ?? value.accountId, reason: 'expiry', endedAt: value.expiresAt });
-        if (res.queued) {
-          await store.set(key, { ...value, pendingChangeRef: refOf(res.change) });
-          summary.queued++;
-        }
+      const groups = await jira.getUserGroups(value.accountId).catch(() => null);
+      if (groups && !groups.some((g) => g.groupId === value.groupId)) {
+        await store.delete(key); // already out of the group
+        summary.dropped++;
         continue;
       }
-      try {
-        await org.removeMember(value.groupId, value.accountId, groupRec.name);
-      } catch (err) {
-        if (err?.code === ErrorCodes.GROUP_NOT_FOUND) {
-          await store.delete(key); // nothing left to remove
-          summary.dropped++;
-        } else {
-          console.warn('Expiry removal failed, retrying next run', value.groupId, err?.message);
-          summary.failed++;
-        }
-        continue;
-      }
-      const [user, project] = await Promise.all([jira.getUser(value.accountId).catch(() => null), store.get(keys.project(groupRec.projectId))]);
-      await writeAudit({
-        action: AuditActions.MEMBER_EXPIRED,
-        projectId: groupRec.projectId,
-        projectKey: project?.key ?? null,
-        groupId: value.groupId,
-        groupName: groupRec.name,
-        targetAccountId: value.accountId,
-        targetName: user?.displayName ?? value.accountId,
-        actorName: 'system',
-        details: { expiresAt: value.expiresAt, setBy: value.setBy?.displayName ?? null },
+      const user = await jira.getUser(value.accountId).catch(() => null);
+      const res = await scheduledRemoval(cache, {
+        groupRec,
+        accountId: value.accountId,
+        displayName: user?.displayName ?? value.accountId,
+        reason: 'expiry',
+        endedAt: value.expiresAt,
+        auditDetails: { expiresAt: value.expiresAt, setBy: value.setBy?.displayName ?? null },
       });
-      await store.delete(key);
-      summary.removed++;
+      if (res.status === 'removed' || res.status === 'gone') {
+        await store.delete(key);
+        summary[res.status === 'removed' ? 'removed' : 'dropped']++;
+      } else if (res.status === 'failed') {
+        summary.failed++;
+      } else if (res.status === 'queued') {
+        await store.set(key, { ...value, pendingChangeRef: refOf(res.change) });
+        summary.queued++;
+      }
     }
     return summary;
   }
@@ -2499,9 +2837,16 @@ export function createService({ jira, org = null, jiraUser = null, confluence = 
     importData,
     searchGroups,
     searchProjects,
-    testOrgApi,
-    saveOrgConnection,
-    removeOrgConnection,
+    purgeLegacyOrgConnection,
+    setPrivilegedAdmin,
+    clearPrivilegedAdmin,
+    updateSetup,
+    listRoles,
+    addRoleMembers,
+    removeRoleMember,
+    searchRoleGroups,
+    addRoleGroups,
+    removeRoleGroup,
     runRetention,
     runExpiry,
     runAutomation,

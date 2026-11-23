@@ -14,7 +14,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
-import { call, openModule, openRovo } from '../api/client.js';
+import { adminPageUrl, call, openModule, openRovo } from '../api/client.js';
+import { RolesPanel } from '../features/roles/RolesPanel.jsx';
 import { aiOn } from '../features/ai.js';
 import { useI18n } from '../i18n/index.jsx';
 import { Footer, Header, Tabs } from '../components/Shell.jsx';
@@ -174,6 +175,19 @@ export function ProjectPage() {
     if (group.addMeError) notify({ type: 'error', title: t('notify.addMeFailed'), description: errorText(t, group.addMeError) });
   };
 
+  // A project admin sends their Jira admin the link to the admin page, where the waiting changes are.
+  const copyAdminLink = async () => {
+    const url = await adminPageUrl().catch(() => null);
+    if (!url) return notify({ type: 'info', title: t('pending.linkManual') });
+    try {
+      await navigator.clipboard.writeText(url);
+      notify({ type: 'success', title: t('pending.linkCopied') });
+    } catch {
+      // Clipboard blocked in the Jira frame: show the address to copy by hand.
+      notify({ type: 'info', title: t('pending.linkShow'), description: url });
+    }
+  };
+
   if (error) return <StateScreen error={error} onRetry={load} />;
 
   const project = boot?.project;
@@ -216,6 +230,7 @@ export function ProjectPage() {
             items={[
               { value: 'groups', label: t('tabs.groups') },
               { value: 'people', label: t('tabs.people') },
+              ...(boot?.rolesEnabled !== false ? [{ value: 'roles', label: t('tabs.roles') }] : []),
               { value: 'requests', label: t('tabs.requests'), badge: pending },
               ...(showChanges ? [{ value: 'changes', label: changes.canApply ? t('tabs.changes') : t('tabs.waiting'), badge: changes.canApply ? changes.pending : changes.mine }] : []),
               { value: 'audit', label: t('tabs.audit') },
@@ -232,11 +247,27 @@ export function ProjectPage() {
           </p>
         )}
         <ConsentBanner />
-        {pendingWrites && tab !== 'changes' && (
-          <p className="notice pending-banner" role="status">
-            <Icon name="clock" size={16} />
-            <span>{t('pending.modeNotice')}</span>
-          </p>
+        {pendingWrites && tab !== 'changes' && tab !== 'roles' && (
+          <div className="notice pending-banner row-between wrap" role="status">
+            <span className="row-8">
+              <Icon name="clock" size={16} />
+              <span>{t('pending.modeNotice')}</span>
+            </span>
+            <Button size="sm" variant="link" icon="copy" onClick={copyAdminLink}>
+              {t('pending.copyLink')}
+            </Button>
+          </div>
+        )}
+        {changes.canApply && (changes.pendingAll ?? 0) > 0 && tab !== 'changes' && (
+          <div className="notice notice-warn pending-banner row-between wrap" role="status">
+            <span className="row-8">
+              <Icon name="clock" size={16} />
+              <span>{t('pending.adminNotice', { count: changes.pendingAll })}</span>
+            </span>
+            <Button size="sm" variant="dark" icon="arrowRight" onClick={() => openModule('gum-admin-page')}>
+              {t('pending.openQueue')}
+            </Button>
+          </div>
         )}
         <AnimatePresence mode="wait" initial={false} custom={tabDir}>
           <motion.div
@@ -263,6 +294,13 @@ export function ProjectPage() {
               <PeoplePanel
                 pendingWrites={pendingWrites}
                 onCountsChange={(counts) => setGroups((gs) => gs.map((g) => (counts[g.groupId] !== undefined ? { ...g, memberCount: counts[g.groupId] } : g)))}
+                onOpenGroup={(groupId) => {
+                  setSelectedId(groupId);
+                  switchTab('groups');
+                }}
+              />
+            ) : tab === 'roles' ? (
+              <RolesPanel
                 onOpenGroup={(groupId) => {
                   setSelectedId(groupId);
                   switchTab('groups');

@@ -1,6 +1,7 @@
 /**
  * Forge KVS adapter for the service's store port: get/set/delete, prefix listing and paged reads for the data
- * export. kvsSecrets is the encrypted secret storage that holds each site's organization connection.
+ * export. kvsSecrets is the encrypted secret storage; it is only used to delete an organization API key that versions
+ * up to 3.17 could store (the app no longer collects such keys).
  *
  * @file        src/forge/kvsStore.js
  * @app         Group Self-Service for Jira
@@ -40,7 +41,7 @@ export const kvsStore = {
   },
 };
 
-// Encrypted, installation-scoped secret storage (organization API connection).
+// Encrypted, installation-scoped secret storage. Only used to delete a legacy organization API key.
 // Secrets are not returned by kvs.query(), so they never end up in a data export.
 export const kvsSecrets = {
   get: (key) => kvs.getSecret(key),

@@ -13,7 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';
-import { memoryAudit, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryJira, memoryStore, memoryJiraUser } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 
 const NOW = Date.UTC(2026, 9, 23, 10, 0, 0);
@@ -25,7 +25,7 @@ function setup(configPatch = {}) {
   const store = memoryStore({ ...seed.store, config: { ...seed.store.config, ...configPatch } });
   const audit = memoryAudit([]);
   let n = 0;
-  const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira), store, audit, now: () => clock.now, uuid: () => `id-${++n}` });
+  const service = createService({ jira: memoryJira(seed.jira), jiraUser: memoryJiraUser(seed.jira), store, audit, now: () => clock.now, uuid: () => `id-${++n}` });
   const ctx = (extra = {}) => ({ accountId: 'u-me', projectId: '10001', surface: 'project', license: null, ...extra });
   return { service, store, audit, jira: seed.jira, clock, ctx };
 }
@@ -64,7 +64,7 @@ test('time-limited membership: stored, shown, validated and audited', async () =
   assert.equal(await codeOf(off.service.addMembers(off.ctx(), { groupId: 'g-admins', accountIds: [LENA], expiresAt: until })), 'EXPIRY_DISABLED');
 });
 
-test('expiry run removes due memberships with a system audit entry and leaves others alone', async () => {
+test('expiry run queues one removal per due membership for a Jira admin and leaves others alone', async () => {
   const { service, ctx, audit, store, jira, clock } = setup();
   await service.bootstrap(ctx());
   await service.addMembers(ctx(), { groupId: 'g-admins', accountIds: [ANNA], expiresAt: NOW + 2 * DAY });
@@ -72,17 +72,20 @@ test('expiry run removes due memberships with a system audit entry and leaves ot
 
   clock.now = NOW + 3 * DAY;
   const summary = await service.runExpiry();
-  assert.deepEqual(summary, { removed: 1, dropped: 0, failed: 0 });
+  assert.deepEqual(summary, { removed: 0, dropped: 0, failed: 0, queued: 1 });
+  assert.ok(jira.groups['g-admins'].members.includes(ANNA), 'nothing removed without a Jira admin');
+  const [change] = (await service.listChanges(ctx())).changes;
+  assert.deepEqual([change.type, change.reason, change.accountId], ['remove', 'expiry', ANNA]);
+
+  // A Jira admin applies it: Anna is out, the end date is gone, Lena stays.
+  await service.applyChanges(ctx(), { refs: [change.ref] });
   assert.ok(!jira.groups['g-admins'].members.includes(ANNA));
   assert.ok(jira.groups['g-admins'].members.includes(LENA));
-  const expired = audit._rows().find((r) => r.action === 'MEMBER_EXPIRED');
-  assert.equal(expired.targetAccountId, ANNA);
-  assert.equal(expired.actorName, 'system');
-  assert.equal(expired.projectKey, 'PROJ');
   assert.equal(await store.get(`expiry:g-admins:${ANNA}`), undefined);
+  assert.ok(audit._rows().some((r) => r.action === 'CHANGE_APPLIED' && r.targetAccountId === ANNA));
 
   // Nothing due anymore: idempotent.
-  assert.deepEqual(await service.runExpiry(), { removed: 0, dropped: 0, failed: 0 });
+  assert.deepEqual(await service.runExpiry(), { removed: 0, dropped: 0, failed: 0, queued: 0 });
 });
 
 test('expiry run never touches IdP-managed or blocked groups', async () => {
@@ -91,7 +94,7 @@ test('expiry run never touches IdP-managed or blocked groups', async () => {
   await store.set('group:g-externe', { groupId: 'g-externe', name: 'atlassian-PROJ-externe', projectId: '10001' });
   jira.groups['g-externe'].members.push(ANNA);
   clock.now = NOW + DAY;
-  assert.deepEqual(await service.runExpiry(), { removed: 0, dropped: 1, failed: 0 });
+  assert.deepEqual(await service.runExpiry(), { removed: 0, dropped: 1, failed: 0, queued: 0 });
   assert.ok(jira.groups['g-externe'].members.includes(ANNA));
 });
 
@@ -296,7 +299,7 @@ test('without an organization connection a project admin changes nothing in Jira
   const seed = createSeed(NOW);
   seed.jira.perms['u-me'] = { jiraAdmin: false, projectAdminOf: ['10001'] };
   const audit = memoryAudit([]);
-  const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira, { configured: false }), store: memoryStore(seed.store), audit, now: () => NOW });
+  const service = createService({ jira: memoryJira(seed.jira), org: memoryJiraUser(seed.jira), store: memoryStore(seed.store), audit, now: () => NOW });
   const ctx = { accountId: 'u-me', projectId: '10001', surface: 'project', license: null };
   await service.bootstrap({ ...ctx });
   assert.equal((await service.createGroup({ ...ctx }, { namePart: 'neu' })).pending, true);

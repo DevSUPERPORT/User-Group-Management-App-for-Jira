@@ -13,7 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';
-import { memoryAudit, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryJira, memoryStore, memoryJiraUser } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 import { AUDIT_PAGE, EXPORT_FORMAT, KVS_PAGE } from '../src/core/transfer.js';
 
@@ -27,7 +27,7 @@ function installation(seed, { empty = false, cloudId = 'site-1' } = {}) {
   const audit = memoryAudit([]);
   let n = 0;
   const clock = { now: NOW };
-  const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira), store, audit, now: () => clock.now++, uuid: () => `${empty ? 't' : 's'}-${String(++n).padStart(6, '0')}` });
+  const service = createService({ jira: memoryJira(seed.jira), jiraUser: memoryJiraUser(seed.jira), store, audit, now: () => clock.now++, uuid: () => `${empty ? 't' : 's'}-${String(++n).padStart(6, '0')}` });
   const ctx = (extra = {}) => ({ accountId: 'u-me', projectId: '10001', surface: 'project', license: null, cloudId, ...extra });
   const admin = (extra = {}) => ctx({ projectId: null, surface: 'admin', ...extra });
   return { service, store, audit, ctx, admin };

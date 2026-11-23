@@ -547,31 +547,34 @@ resources:
   - key: icons
     path: static/icons
 permissions:
+  # A map (not a list) so single scopes can allow offline impersonation: "Apply project admins' changes automatically"
+  # performs group changes as the Jira admin who switched it on for themselves (asUser(accountId)), like a Jira admin
+  # would by hand. No credentials are stored; only that admin's account id.
   scopes:
-    - read:jira-user
-    - read:jira-work
-    - manage:jira-configuration
-    - storage:app
+    read:jira-user: {}
+    read:jira-work: {}
+    manage:jira-configuration:
+      allowImpersonation: true
+    storage:app: {}
+    # Roles tab: removing a person from a project role (DELETE /project/{id}/role/{id}) needs this granular scope;
+    # adding works with the scopes above. Runs with the project admin's own rights (asUser()).
+    delete:project-role:jira: {}
     # Workflow usage (new workflow API) - the classic scopes are not accepted there.
-    - read:workflow:jira
+    read:workflow:jira: {}
     # Issue security usage (scheme list only accepts these granular read scopes).
-    - read:issue-security-scheme:jira
-    - read:issue-security-level:jira
+    read:issue-security-scheme:jira: {}
+    read:issue-security-level:jira: {}
     # Confluence usage (space permissions, page restrictions index).
-    - read:confluence-space.summary
-    - read:confluence-content.all
-    - read:space:confluence
-    - read:space.permission:confluence
-    - read:page:confluence
+    read:confluence-space.summary: {}
+    read:confluence-content.all: {}
+    read:space:confluence: {}
+    read:space.permission:confluence: {}
+    read:page:confluence: {}
   content:
     styles:
       - unsafe-inline
-  # Optional organization connection ("Organization connection applies changes"): group writes through the Atlassian
-  # Organization Admin API. Jira-admin mode needs no egress (Jira REST asUser via requestJira).
-  external:
-    fetch:
-      backend:
-        - address: https://api.atlassian.com
+  # No egress: group changes run through Jira REST as the signed-in Jira admin (asUser via requestJira); the app
+  # does not call the Organization Admin API and does not collect organization API keys.
 app:
   id: ari:cloud:ecosystem::app/dc5e1b22-ba7a-4f79-803d-48d73eee2104
   runtime:

@@ -1,6 +1,6 @@
 /**
- * Configuration tab of the Jira admin page: how group changes are made (Jira admins or the optional organization
- * connection), the TEST ONLY switch (development environment only), organization connection, project scope, block list, IdP read-only
+ * Configuration tab of the Jira admin page: how group changes are made (Jira admins apply them; read-only), the TEST
+ * ONLY switch (development environment only), project scope, block list, IdP read-only
  * groups, auditor groups, member view, time limits, AI features (Rovo agent), requests, reviews, automation and scope guard, saved together
  * and undoable.
  *
@@ -82,41 +82,36 @@ function Chips({ items, render = (x) => x, onRemove, removeLabel, keyOf = (x) =>
   );
 }
 
-// "How group changes are made": Jira admins apply changes with their own rights (recommended, no organization key),
-// or the optional organization connection applies every change. Shows what is really in effect.
-function ChangeModeSection({ value, current, onChange, orgConfigured, waiting, onOpenQueue }) {
-  const { t } = useI18n();
-  // What applies right now: the saved setting (not the unsaved draft), and organization mode only while connected.
-  const effective = current === 'org' && orgConfigured ? 'org' : 'jiraAdmin';
+// How group changes are made (read-only): Jira admins apply them as themselves; project admins' changes and automatic
+// removals wait under "Changes to apply". The app does not use organization API keys (Marketplace requirement).
+// How group changes are made, and "Apply project admins' changes automatically" (privileged admin, like CSUM's
+// privileged user): a Jira admin lets the app act with their own account (Forge offline impersonation) for project
+// admins' changes and the scheduled removals. Switched on only for oneself; any Jira admin can stop it.
+function ChangeModeSection({ waiting, onOpenQueue, privileged: initialPrivileged, me }) {
+  const { t, fmt } = useI18n();
+  const notify = useNotify();
+  const [privileged, setPrivileged] = useState(initialPrivileged ?? { on: false, paused: false });
+  const [busy, setBusy] = useState(null);
+  const run = async (name) => {
+    setBusy(name);
+    try {
+      const res = await call(name);
+      setPrivileged(res.privileged);
+      notify({ type: 'success', title: t(res.privileged.on ? 'config.autoSwitchedOn' : 'config.autoSwitchedOff') });
+    } catch (err) {
+      notify({ type: 'error', title: errorText(t, err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const mine = privileged.accountId && privileged.accountId === me;
+  const state = privileged.on ? 'is-ok' : privileged.paused ? 'is-error' : '';
   return (
     <Section id="sec-mode" title={t('config.mode')} hint={t('config.modeHint')} delay={0.06}>
-      <fieldset className="radio-group">
-        <legend className="sr-only">{t('config.mode')}</legend>
-        <RadioCard name="mode" id="mode-jira" layoutGroup="mode" checked={value !== 'org'} onSelect={() => onChange('jiraAdmin')}>
-          <span className="grow stack-4">
-            <label htmlFor="mode-jira">{t('config.modeJiraAdmin')}</label>
-            <span className="muted small">{t('config.modeJiraAdminHint')}</span>
-          </span>
-        </RadioCard>
-        <RadioCard name="mode" id="mode-org" layoutGroup="mode" checked={value === 'org'} onSelect={() => onChange('org')}>
-          <span className="grow stack-4">
-            <label htmlFor="mode-org">{t('config.modeOrg')}</label>
-            <span className="muted small">{t('config.modeOrgHint')}</span>
-          </span>
-        </RadioCard>
-      </fieldset>
-      <AnimatePresence initial={false}>
-        {value === 'org' && !orgConfigured && (
-          <motion.p className="notice notice-warn" role="status" {...collapse}>
-            <Icon name="alert" size={16} />
-            <span>{t('config.modeOrgMissing')}</span>
-          </motion.p>
-        )}
-      </AnimatePresence>
       <div className="row-between wrap mode-now">
         <span className="small">
-          <span className="org-status-light inline" data-mode={effective} aria-hidden="true" />
-          {t('config.modeNow', { mode: t(effective === 'org' ? 'config.modeNowOrg' : 'config.modeNowJiraAdmin') })}
+          <span className="org-status-light inline" data-mode="jiraAdmin" aria-hidden="true" />
+          {t(privileged.on ? 'config.modeNowAutomatic' : 'config.modeNowJiraAdmin')}
           {waiting > 0 ? ` · ${t('config.modeWaiting', { count: waiting })}` : ''}
         </span>
         {waiting > 0 && (
@@ -124,6 +119,35 @@ function ChangeModeSection({ value, current, onChange, orgConfigured, waiting, o
             {t('config.modeOpenQueue')}
           </Button>
         )}
+      </div>
+      <div className="subsection stack-12" id="auto-changes">
+        <div className="stack-4">
+          <h3 className="label-strong">{t('config.auto')}</h3>
+          <p className="muted small">{t('config.autoHint')}</p>
+        </div>
+        <div className={`org-status ${state}`} role="status">
+          <span className="org-status-light" aria-hidden="true" />
+          <span className="small grow">
+            {privileged.on
+              ? t(mine ? 'config.autoOnMine' : 'config.autoOn', { name: privileged.displayName, date: fmt.date(privileged.setAt) })
+              : privileged.paused
+                ? t('config.autoPaused', { name: privileged.displayName, reason: t(`config.autoPausedReason.${privileged.pausedReason ?? 'NOT_ADMIN'}`, { name: privileged.displayName }) })
+                : t('config.autoOff')}
+          </span>
+          <span className="org-actions">
+            {(!privileged.on || !mine) && (
+              <Button size="sm" variant={privileged.on ? 'secondary' : 'dark'} icon="check" loading={busy === 'setPrivilegedAdmin'} disabled={Boolean(busy)} onClick={() => run('setPrivilegedAdmin')}>
+                {t(privileged.on || privileged.paused ? 'config.autoUseMineInstead' : 'config.autoUseMine')}
+              </Button>
+            )}
+            {(privileged.on || privileged.paused) && (
+              <Button size="sm" variant="link" loading={busy === 'clearPrivilegedAdmin'} disabled={Boolean(busy)} onClick={() => run('clearPrivilegedAdmin')}>
+                {t('config.autoStop')}
+              </Button>
+            )}
+          </span>
+        </div>
+        <p className="muted small">{t('config.autoSafety')}</p>
       </div>
     </Section>
   );
@@ -177,215 +201,6 @@ function TestProjectAdminsSection({ accounts, onChange, me }) {
   );
 }
 
-// Optional since Jira-admin mode: the organization connection lets project admins' changes apply at once and runs
-// automatic removals. Every site connects its own organization here; the key is stored encrypted for this
-// installation only and never comes back to the browser.
-function OrgConnectionSection({ initialStatus, onStatus, used = true }) {
-  const { t, fmt } = useI18n();
-  const notify = useNotify();
-  const [conn, setConnState] = useState(initialStatus ?? { configured: false });
-  const setConn = (next) => {
-    setConnState(next);
-    onStatus?.(next);
-  };
-  const [editing, setEditing] = useState(false);
-  const [orgId, setOrgId] = useState(initialStatus?.orgId ?? '');
-  const [apiKey, setApiKey] = useState('');
-  const [directories, setDirectories] = useState(null);
-  const [directoryId, setDirectoryId] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState(null);
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState(null);
-
-  const test = async () => {
-    setTesting(true);
-    try {
-      setResult(await call('testOrgApi'));
-    } catch (err) {
-      setResult({ ok: false, error: { message: errorText(t, err) } });
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  useEffect(() => {
-    if (conn.configured) test();
-  }, [conn.configured, conn.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const closeForm = () => {
-    setEditing(false);
-    setApiKey('');
-    setFormError(null);
-    setDirectories(null);
-    setDirectoryId('');
-  };
-
-  const save = async (e) => {
-    e.preventDefault();
-    setFormError(null);
-    if (!orgId.trim() || !apiKey.trim()) {
-      setFormError(t('config.orgFieldsMissing'));
-      return;
-    }
-    setSaving(true);
-    try {
-      const status = await call('saveOrgConnection', { orgId: orgId.trim(), apiKey: apiKey.trim(), directoryId: directoryId || null });
-      setConn(status);
-      setResult(null);
-      closeForm();
-      notify({ type: 'success', title: t('config.orgSaved') });
-    } catch (err) {
-      if (err.code === 'ORG_DIRECTORY_REQUIRED' && err.details?.directories?.length) {
-        setDirectories(err.details.directories);
-        setDirectoryId(err.details.directories[0].directoryId);
-        setFormError(t('config.orgPickDirectory'));
-      } else {
-        setFormError(errorText(t, err));
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const remove = async () => {
-    setSaving(true);
-    try {
-      setConn(await call('removeOrgConnection'));
-      setConfirmRemove(false);
-      setEditing(false);
-      setResult(null);
-      notify({ type: 'info', title: t('config.orgRemoved') });
-    } catch (err) {
-      notify({ type: 'error', title: errorText(t, err) });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const status = !conn.configured ? 'missing' : testing && !result ? 'checking' : result?.ok ? 'ok' : result ? 'error' : 'checking';
-  const statusText = {
-    missing: t('config.orgNotSet'),
-    checking: t('config.orgChecking'),
-    ok: t('config.orgOk', { name: conn.directoryName ?? conn.directoryId }),
-    error: t('config.orgFail', { message: result?.error?.message ?? t('config.orgDirectoryGone') }),
-  }[status];
-
-  return (
-    <Section id="sec-org" title={t('config.org')} hint={t('config.orgHint')} delay={0.08}>
-      <div className={`org-status is-${status}`} role="status" aria-live="polite">
-        <span className="org-status-light" aria-hidden="true" />
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span key={status + statusText} className="grow" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18, ease }}>
-            {statusText}
-          </motion.span>
-        </AnimatePresence>
-        {conn.configured && (
-          <Button size="sm" icon="refresh" onClick={test} loading={testing}>
-            {t('config.orgTest')}
-          </Button>
-        )}
-      </div>
-
-      {!conn.configured && !editing && (
-        <div className="org-actions">
-          <Button size="sm" icon="key" onClick={() => setEditing(true)}>
-            {t('config.orgConnect')}
-          </Button>
-        </div>
-      )}
-
-      {conn.configured && !used && (
-        <p className="notice small">
-          <Icon name="info" size={16} />
-          <span>{t('config.orgUnused')}</span>
-        </p>
-      )}
-
-      {conn.configured && !editing && (
-        <div className="subsection org-details">
-          <p className="small muted">
-            {t('config.orgDetails', { orgId: conn.orgId })}
-            {conn.updatedAt ? ` · ${t('config.orgSavedBy', { when: fmt.dateTime(conn.updatedAt), name: conn.updatedBy?.displayName ?? '–' })}` : ''}
-          </p>
-          {confirmRemove ? (
-            <div className="org-actions">
-              <span className="small grow">{t('config.orgRemoveConfirm')}</span>
-              <Button size="sm" onClick={() => setConfirmRemove(false)}>
-                {t('config.orgCancel')}
-              </Button>
-              <Button size="sm" variant="danger" loading={saving} onClick={remove}>
-                {t('config.orgRemove')}
-              </Button>
-            </div>
-          ) : (
-            <div className="org-actions">
-              <Button size="sm" onClick={() => setEditing(true)}>
-                {t('config.orgReplace')}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirmRemove(true)}>
-                {t('config.orgRemove')}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      <AnimatePresence initial={false}>
-        {editing && (
-          <motion.div {...collapse}>
-            <form className="subsection org-form" onSubmit={save} noValidate>
-              <p className="small">{t('config.orgHowTo')}</p>
-              <div className="stack-6">
-                <label htmlFor="org-id" className="label-strong">
-                  {t('config.orgIdLabel')}
-                </label>
-                <input id="org-id" className="input" type="text" autoComplete="off" spellCheck={false} value={orgId} onChange={(e) => setOrgId(e.target.value)} />
-                <span className="small muted">{t('config.orgIdHelp')}</span>
-              </div>
-              <div className="stack-6">
-                <label htmlFor="org-key" className="label-strong">
-                  {t('config.orgKeyLabel')}
-                </label>
-                <input id="org-key" className="input" type="password" autoComplete="new-password" spellCheck={false} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-                <span className="small muted">{t('config.orgKeyHelp')}</span>
-              </div>
-              {directories && (
-                <div className="stack-6">
-                  <label htmlFor="org-dir" className="label-strong">
-                    {t('config.orgDirectoryLabel')}
-                  </label>
-                  <select id="org-dir" className="input" value={directoryId} onChange={(e) => setDirectoryId(e.target.value)}>
-                    {directories.map((d) => (
-                      <option key={d.directoryId} value={d.directoryId}>
-                        {d.name ?? d.directoryId}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {formError && (
-                <div className="notice notice-error" role="alert">
-                  <Icon name="alert" size={18} />
-                  <span>{formError}</span>
-                </div>
-              )}
-              <div className="org-actions">
-                <Button type="submit" variant="primary" loading={saving}>
-                  {t('config.orgSave')}
-                </Button>
-                <Button onClick={closeForm}>{t('config.orgCancel')}</Button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </Section>
-  );
-}
-
-// Fixed entries of the block list: shown with a lock, no remove button.
 function LockedChips({ items }) {
   const { t } = useI18n();
   return (
@@ -411,7 +226,6 @@ const addUnique = (list, v) => (list.some((x) => x.toLowerCase() === v.toLowerCa
 export function AdminConfig({ initial, onSaved, waiting = 0, onOpenQueue }) {
   const { t } = useI18n();
   const notify = useNotify();
-  const [orgConfigured, setOrgConfigured] = useState(Boolean(initial.orgApi?.configured));
   const [saved, setSaved] = useState(initial.config);
   const [draft, setDraft] = useState(initial.config);
   const [months, setMonths] = useState(String(initial.config.retentionMonths ?? 24));
@@ -515,11 +329,9 @@ export function AdminConfig({ initial, onSaved, waiting = 0, onOpenQueue }) {
         <p className="muted small">{t('config.namingNote')}</p>
       </Section>
 
-      <ChangeModeSection value={draft.groupChanges} current={saved.groupChanges} onChange={(v) => update({ groupChanges: v })} orgConfigured={orgConfigured} waiting={waiting} onOpenQueue={onOpenQueue} />
+      <ChangeModeSection waiting={waiting} onOpenQueue={onOpenQueue} privileged={initial.privileged} me={initial.user?.accountId} />
 
       {initial.development && <TestProjectAdminsSection accounts={draft.testProjectAdmins ?? []} onChange={(v) => update({ testProjectAdmins: v })} me={initial.user?.accountId} />}
-
-      <OrgConnectionSection initialStatus={initial.orgApi} onStatus={(st) => setOrgConfigured(Boolean(st?.configured))} used={saved.groupChanges === 'org'} />
 
       <Section id="sec-roles" title={t('config.roles')} hint={t('config.rolesHint')} delay={0.09}>
         <div className="stack-4">
@@ -527,6 +339,10 @@ export function AdminConfig({ initial, onSaved, waiting = 0, onOpenQueue }) {
             {t('config.memberView')}
           </Checkbox>
           <p className="muted small checkbox-hint">{t('config.memberViewWhere')}</p>
+          <Checkbox id="roles-on" checked={draft.rolesEnabled !== false} onChange={(v) => update({ rolesEnabled: v })}>
+            {t('config.rolesTab')}
+          </Checkbox>
+          <p className="muted small checkbox-hint">{t('config.rolesTabHint')}</p>
           <Checkbox id="expiry-on" checked={draft.expiryEnabled !== false} onChange={(v) => update({ expiryEnabled: v })}>
             {t('config.expiry')}
           </Checkbox>

@@ -13,7 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';
-import { memoryAudit, memoryConfluence, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryConfluence, memoryJira, memoryStore, memoryJiraUser } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 import { AI_DISABLED_MESSAGE, AI_STOPPED_MESSAGE, createRovoActions } from '../src/rovoActions.js';
 import { vendorAiStop } from '../src/core/aiBudget.js';
@@ -28,7 +28,7 @@ function setup({ idp = [], ai = true, env } = {}) {
   if (ai !== null) seed.store.config.aiEnabled = ai;
   const audit = memoryAudit([]);
   const rovoAudit = { ...audit, append: (e) => audit.append({ ...e, details: { ...(e.details ?? {}), via: 'rovo' } }) };
-  const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira), confluence: memoryConfluence(seed.jira), store: memoryStore(seed.store), audit: rovoAudit, now: () => NOW, env });
+  const service = createService({ jira: memoryJira(seed.jira), jiraUser: memoryJiraUser(seed.jira), confluence: memoryConfluence(seed.jira), store: memoryStore(seed.store), audit: rovoAudit, now: () => NOW, env });
   const rovo = createRovoActions(service, { now: () => NOW, env });
   // Forge passes the calling user in the invocation context.
   const as = (accountId = 'u-me') => ({ principal: { accountId } });

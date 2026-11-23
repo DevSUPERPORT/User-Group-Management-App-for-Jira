@@ -852,6 +852,11 @@ input[type='search']::-webkit-search-cancel-button {
   background: var(--soft);
   transition: opacity 0.2s;
 }
+/* Groups in a project role: same size as a person's avatar, with a group icon. */
+.avatar.group-avatar {
+  width: 32px;
+  height: 32px;
+}
 .avatar[data-tone='1'] {
   background: #fce9df;
 }
@@ -3764,4 +3769,66 @@ button.compliance-card:hover:not(:disabled),
   align-items: center;
   gap: 8px;
   color: var(--danger);
+}
+
+/* ------------------------------------------------------------------ first-run setup checklist (admin page) */
+.setup-card {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+.setup-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.setup-step {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: background-color 0.3s, border-color 0.3s;
+}
+.setup-step.is-done {
+  background: var(--soft);
+}
+.setup-step-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+}
+.setup-step.is-done .setup-step-mark {
+  color: #fff;
+  background: #2f8a4c;
+  border-color: #2f8a4c;
+}
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+.link-button:hover {
+  text-decoration: underline;
+}
+.setup-manual {
+  flex-basis: 100%;
+}
+.setup-manual textarea {
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
 }

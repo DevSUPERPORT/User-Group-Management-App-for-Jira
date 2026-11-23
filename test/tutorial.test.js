@@ -12,7 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';
-import { memoryAudit, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryJira, memoryStore, memoryJiraUser } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 
 const NOW = Date.UTC(2026, 9, 27, 10, 0, 0);
@@ -20,7 +20,7 @@ const NOW = Date.UTC(2026, 9, 27, 10, 0, 0);
 function setup() {
   const seed = createSeed(NOW);
   const store = memoryStore(seed.store);
-  const service = createService({ jira: memoryJira(seed.jira), org: memoryOrg(seed.jira), store, audit: memoryAudit([]), now: () => NOW });
+  const service = createService({ jira: memoryJira(seed.jira), jiraUser: memoryJiraUser(seed.jira), store, audit: memoryAudit([]), now: () => NOW });
   const ctx = (extra = {}) => ({ accountId: 'u-me', projectId: '10001', surface: 'project', license: null, ...extra });
   return { service, store, ctx };
 }

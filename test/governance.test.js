@@ -13,7 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';
-import { memoryAudit, memoryConfluence, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryConfluence, memoryJira, memoryStore, memoryJiraUser } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 import { runIndexStep } from '../src/core/confluenceIndex.js';
 
@@ -28,7 +28,7 @@ function setup({ config = {}, confluence = true } = {}) {
   let n = 0;
   const service = createService({
     jira: memoryJira(seed.jira),
-    org: memoryOrg(seed.jira),
+    jiraUser: memoryJiraUser(seed.jira),
     confluence: memoryConfluence(seed.jira, { available: confluence }),
     store,
     audit,
@@ -202,14 +202,15 @@ test('deactivated accounts: preview lists them; automation only runs when switch
 
   await store.set('config', { ...(await store.get('config')), autoRemoveDeactivated: true });
   jira.groups['g-externe'].members.push('u-tom-fischer');
+  // The daily job has no signed-in user: each removal waits for a Jira admin, IdP groups are never touched.
   const res = await service.runAutomation();
-  assert.equal(res.removed, 2);
+  assert.deepEqual(res, { removed: 0, queued: 2 });
+  assert.equal(jira.groups['g-big'].members.length, 38, 'nothing removed without a Jira admin');
+  const queued = (await service.listChanges(adminCtx)).changes;
+  assert.deepEqual(queued.map((c) => [c.groupId, c.reason]), [['g-big', 'deactivated'], ['g-big', 'deactivated']]);
+  await service.applyChanges(adminCtx, { refs: queued.map((c) => c.ref) });
   assert.equal(jira.groups['g-big'].members.length, 36);
   assert.ok(jira.groups['g-externe'].members.includes('u-tom-fischer'), 'IdP group untouched');
-  const auto = audit._rows().filter((r) => r.action === 'MEMBER_AUTO_REMOVED');
-  assert.equal(auto.length, 2);
-  assert.equal(auto[0].actorName, 'system');
-  assert.equal(auto[0].projectKey, 'PROJ');
 
   const notAdmin = { accountId: 'u-lena-koch', projectId: null, surface: 'admin', license: null };
   assert.equal(await codeOf(service.previewDeactivatedCleanup(notAdmin)), 'NOT_ADMIN');

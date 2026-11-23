@@ -15,14 +15,13 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { memoryAudit, memoryConfluence, memoryJira, memoryJiraUser, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryConfluence, memoryJira, memoryJiraUser, memoryStore } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 
 // ---------------------------------------------------------------- counted in-memory backends
 
 const WRITES = {
   jira: ['createGroup', 'addMember', 'removeMember'],
-  org: ['connect', 'disconnect', 'createGroup', 'addMember', 'removeMember'],
   jiraUser: ['createGroup', 'addMember', 'removeMember'],
   store: ['set', 'delete'],
   secrets: ['set', 'delete'],
@@ -38,7 +37,6 @@ function reset() {
   const secrets = new Map();
   live = {
     jira: memoryJira(seed.jira),
-    org: memoryOrg(seed.jira),
     jiraUser: memoryJiraUser(seed.jira),
     confluence: memoryConfluence(seed.jira),
     store: memoryStore(seed.store),
@@ -59,7 +57,7 @@ function counted(kind) {
       counts.calls++;
       if (WRITES[kind].includes(name)) {
         counts.writes++;
-        if (kind === 'org' || kind === 'jira' || kind === 'jiraUser') counts.groupWrites++;
+        if (kind === 'jira' || kind === 'jiraUser') counts.groupWrites++;
       }
       return live[kind][name](...args);
     };
@@ -86,7 +84,6 @@ class FakeResolver {
 
 mock.module('@forge/resolver', { defaultExport: FakeResolver });
 mock.module(src('forge/jiraClient.js'), { namedExports: { jiraClient: counted('jira') } });
-mock.module(src('forge/orgClient.js'), { namedExports: { createOrgClient: () => counted('org') } });
 mock.module(src('forge/jiraUserWriter.js'), { namedExports: { jiraUserWriter: counted('jiraUser'), isConsentError: (err) => err?.name === 'NEEDS_AUTHENTICATION_ERR' || err?.cause?.name === 'NEEDS_AUTHENTICATION_ERR' } });
 mock.module(src('forge/confluenceClient.js'), { namedExports: { confluenceClient: counted('confluence') } });
 mock.module(src('forge/kvsStore.js'), { namedExports: { kvsStore: counted('store'), kvsSecrets: counted('secrets') } });
@@ -123,8 +120,8 @@ const call = (name, payload = {}, surface = 'project', accountId) => handler({ c
 const SURFACE = {
   myGroups: 'member', requestAccess: 'member', withdrawRequest: 'member',
   auditorBootstrap: 'auditor',
-  adminBootstrap: 'admin', saveConfig: 'admin', exportData: 'admin', importData: 'admin', searchGroups: 'admin', searchProjects: 'admin',
-  testOrgApi: 'admin', saveOrgConnection: 'admin', removeOrgConnection: 'admin', previewDeactivatedCleanup: 'admin', rebuildConfluenceIndex: 'admin',
+  adminBootstrap: 'admin', saveConfig: 'admin', setPrivilegedAdmin: 'admin', clearPrivilegedAdmin: 'admin', updateSetup: 'admin', exportData: 'admin', importData: 'admin', searchGroups: 'admin', searchProjects: 'admin',
+  previewDeactivatedCleanup: 'admin', rebuildConfluenceIndex: 'admin',
 };
 const PAYLOAD = {
   checkName: { namePart: 'new-team' },
@@ -150,18 +147,22 @@ const PAYLOAD = {
   saveConfig: { config: { retentionMonths: 1 } },
   exportData: { part: 'meta' },
   importData: { part: 'finish', cloudId: 'cloud-1' },
-  saveOrgConnection: { orgId: 'org-x', apiKey: 'key' },
   applyChanges: { refs: ['10001:c1'] },
   rejectChanges: { refs: ['10001:c1'], note: 'no' },
   withdrawChanges: { refs: ['10001:c1'] },
+  addRoleMembers: { roleId: '10001', accountIds: ['u-max-muster'] },
+  removeRoleMember: { roleId: '10001', accountId: 'u-lena-koch' },
+  addRoleGroups: { roleId: '10003', groupIds: ['g-qa'] },
+  updateSetup: { step: 'announced' },
+  removeRoleGroup: { roleId: '10001', groupId: 'g-big' },
 };
 // The resolvers that keep working in read-only mode. Kept here on purpose (not imported from src/index.js):
 // adding a resolver to READS needs a deliberate change to this test as well.
 const EXPECTED_READS = [
   'bootstrap', 'checkName', 'accessMatrix', 'getGroup', 'getMembers', 'searchUsers', 'resolveUsers', 'exportMembers', 'getUsage',
   'listRequests', 'queryAudit', 'auditFilterOptions', 'exportAudit', 'tutorialState', 'myGroups', 'auditorBootstrap',
-  'adminBootstrap', 'exportData', 'searchGroups', 'searchProjects', 'testOrgApi', 'previewDeactivatedCleanup',
-  'listChanges', 'grantAccess',
+  'adminBootstrap', 'exportData', 'searchGroups', 'searchProjects', 'previewDeactivatedCleanup',
+  'listChanges', 'grantAccess', 'listRoles', 'searchRoleGroups',
 ];
 
 const RESOLVERS = handler.names().filter((n) => n !== 'availability');
@@ -251,8 +252,13 @@ test('APP_MAINTENANCE=on: the UI is told, Rovo answers "unavailable" and the sch
   reset();
   await withPendingJobs();
   const before = migrations;
-  for (const job of SCHEDULED) await index[job]();
+  for (const job of SCHEDULED.filter((j) => j !== 'lifecycleHandler')) await index[job]();
   assert.equal(counts.calls, 0, 'not even reads');
+  // The install/upgrade trigger only removes an organization API key stored by an old version, even while the app
+  // is down (deleting a credential the app must not keep is always allowed); it migrates nothing.
+  await live.secrets.set('org-connection', { orgId: 'o', apiKey: 'k' });
+  await index.lifecycleHandler();
+  assert.equal(await live.secrets.get('org-connection'), undefined, 'stored key removed');
   assert.equal(migrations, before);
 });
 
@@ -343,13 +349,15 @@ test('APP_MAINTENANCE off or unset: the app works normally (control for the test
     reset();
     assert.equal((await call('availability')).data.mode, 'off');
     const created = await call('createGroup', PAYLOAD.createGroup);
+    assert.equal(await live.secrets.get('org-connection'), undefined, 'no organization key is kept');
     assert.equal(created.data?.name, 'atlassian-PROJ-new-team', JSON.stringify(created));
     assert.ok(counts.groupWrites > 0);
     assert.equal((await index.rovoListGroups({ projectKey: 'PROJ' }, rovoCaller)).ok, true);
     reset();
     await withPendingJobs();
     await index.expiryHandler();
-    assert.ok(counts.groupWrites > 0, 'the due membership is ended');
-    assert.equal(await live.store.get('expiry:g-admins:u-me'), undefined);
+    // No signed-in user in a scheduled job: the ended membership waits for a Jira admin as one pending removal.
+    assert.ok((await live.store.list('change:')).length > 0, 'the due membership is queued for a Jira admin');
+    assert.ok((await live.store.get('expiry:g-admins:u-me'))?.pendingChangeRef, 'the end date points to the waiting removal');
   }
 });

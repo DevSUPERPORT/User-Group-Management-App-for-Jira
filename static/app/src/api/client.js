@@ -126,6 +126,23 @@ export async function openModule(moduleKey, projectKey) {
   window.open(url.toString(), '_blank', 'noopener');
 }
 
+// Address of this app's Jira admin page ("Changes to apply"), for a project admin to send to their Jira admin.
+// Built from the Forge context (siteUrl + the app and environment ids in localId); null when they are missing.
+export async function adminPageUrl() {
+  const b = await backend();
+  if (!b.navigateToModule) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'admin');
+    return url.toString();
+  }
+  const c = await b.getContext();
+  const m = String(c?.localId ?? '').match(/extension\/([0-9a-f-]{36})\/([0-9a-f-]{36})\//);
+  const appId = m?.[1];
+  const envId = c?.environmentId ?? m?.[2];
+  if (!c?.siteUrl || !appId || !envId) return null;
+  return `${c.siteUrl}/jira/settings/apps/${appId}/${envId}`;
+}
+
 // Opens the Rovo chat with this app's agent, optionally with a prepared prompt.
 export async function openRovo(prompt) {
   const b = await backend();

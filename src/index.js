@@ -17,7 +17,6 @@ import { createService, isLicenseInactive } from './core/service.js';
 import { AppError, ErrorCodes, toErrorPayload } from './core/errors.js';
 import { maintenanceMode, requireAvailable, STATUS_PAGE_URL } from './core/maintenance.js';
 import { jiraClient } from './forge/jiraClient.js';
-import { createOrgClient } from './forge/orgClient.js';
 import { isConsentError, jiraUserWriter } from './forge/jiraUserWriter.js';
 import { environmentTypeOf } from './forge/environment.js';
 import { confluenceClient } from './forge/confluenceClient.js';
@@ -29,7 +28,7 @@ import { runMigrations, sqlAudit } from './forge/sqlAudit.js';
 const Resolver = ResolverExport.default ?? ResolverExport;
 
 // jiraUser: group writes as the signed-in Jira admin (Jira-admin mode); the service hands it only to Jira admins.
-const service = createService({ jira: jiraClient, org: createOrgClient({ secrets: kvsSecrets }), jiraUser: jiraUserWriter, confluence: confluenceClient, store: kvsStore, audit: sqlAudit });
+const service = createService({ jira: jiraClient, secrets: kvsSecrets, jiraUser: jiraUserWriter, confluence: confluenceClient, store: kvsStore, audit: sqlAudit });
 
 const ADMIN_MODULE = 'gum-admin-page';
 const MEMBER_MODULE = 'gum-my-groups';
@@ -85,6 +84,13 @@ const PROJECT_FUNCTIONS = [
   'applyChanges',
   'rejectChanges',
   'withdrawChanges',
+  // Project roles: changes run with the project admin's own Jira rights (asUser) and apply at once.
+  'listRoles',
+  'addRoleMembers',
+  'removeRoleMember',
+  'searchRoleGroups',
+  'addRoleGroups',
+  'removeRoleGroup',
 ];
 const SHARED_FUNCTIONS = ['queryAudit', 'auditFilterOptions', 'exportAudit'];
 const TUTORIAL_FUNCTIONS = ['tutorialState', 'markTutorialSeen'];
@@ -94,13 +100,15 @@ const CONSENT_FUNCTIONS = ['grantAccess'];
 const MEMBER_FUNCTIONS = ['myGroups', 'requestAccess', 'withdrawRequest'];
 const AUDITOR_FUNCTIONS = ['auditorBootstrap'];
 // exportData / importData: Jira admin page only, and the service checks "Administer Jira" on every call.
-const ADMIN_FUNCTIONS = ['adminBootstrap', 'saveConfig', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'testOrgApi', 'saveOrgConnection', 'removeOrgConnection', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex'];
+const ADMIN_FUNCTIONS = ['adminBootstrap', 'saveConfig', 'setPrivilegedAdmin', 'clearPrivilegedAdmin', 'updateSetup', 'exportData', 'importData', 'searchGroups', 'searchProjects', 'previewDeactivatedCleanup', 'rebuildConfluenceIndex'];
 
 // Resolvers that only read. They may refresh the app's own caches and bookkeeping (group discovery, where-used
 // cache, the export's audit entry), but never change a group, a membership, a request or a setting.
 // Everything else counts as a write: a new resolver is refused in read-only mode unless it is listed here on purpose.
 const READS = new Set([
   'bootstrap',
+  'listRoles',
+  'searchRoleGroups',
   'checkName',
   'accessMatrix',
   'getGroup',
@@ -120,7 +128,6 @@ const READS = new Set([
   'exportData',
   'searchGroups',
   'searchProjects',
-  'testOrgApi',
   'previewDeactivatedCleanup',
   'listChanges',
   'grantAccess',
@@ -139,6 +146,7 @@ function define(name, allowed) {
     }
     const ctx = contextOf(req);
     if (!allowed.includes(ctx.surface)) return toErrorPayload(Object.assign(new Error('Not available here'), { code: 'FORBIDDEN' }));
+    await purgeLegacyKeyOnce();
     try {
       return { data: await service[name](ctx, req.payload ?? {}) };
     } catch (err) {
@@ -183,6 +191,7 @@ function skipped(job, allowedIn) {
 // Daily scheduled trigger: removes audit entries older than the configured retention.
 export async function retentionHandler() {
   if (skipped('Audit retention', ['off', 'readonly'])) return { statusCode: 204 };
+  await purgeLegacyKey(); // daily fallback in case the install/upgrade trigger did not run
   await runMigrations();
   const result = await service.runRetention();
   console.log('Audit retention run', result);
@@ -215,9 +224,28 @@ export async function expiryHandler() {
   return { statusCode: 204 };
 }
 
-// Install/upgrade trigger: creates or migrates the audit table.
-// While the app is down it is skipped; the audit table is also migrated lazily on its first use.
+// Deletes an organization API key stored by versions up to 3.17 (see service.purgeLegacyOrgConnection). Runs even while
+// the app is down: removing a credential the app must not keep is always allowed.
+async function purgeLegacyKey() {
+  try {
+    const res = await service.purgeLegacyOrgConnection();
+    if (res.removed) console.log('Stored organization API key removed (no longer supported)');
+  } catch (err) {
+    console.warn('Removing the stored organization API key failed, retrying on the next run', err?.message);
+  }
+}
+
+// Also once per runtime instance on the first app call: a minor-version deploy does not fire the upgrade trigger.
+let legacyPurge = null;
+function purgeLegacyKeyOnce() {
+  if (!legacyPurge) legacyPurge = purgeLegacyKey();
+  return legacyPurge;
+}
+
+// Install/upgrade trigger: removes a legacy organization API key, then creates or migrates the audit table.
+// While the app is down the migration is skipped; the audit table is also migrated lazily on its first use.
 export async function lifecycleHandler() {
+  await purgeLegacyKey();
   if (skipped('SQL migrations', ['off', 'readonly'])) return;
   const applied = await runMigrations();
   console.log('SQL migrations applied', applied);

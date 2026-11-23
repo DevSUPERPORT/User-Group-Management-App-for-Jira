@@ -65,6 +65,12 @@ export const jiraClient = {
     return (res ?? []).map((g) => ({ groupId: g.groupId, name: g.name }));
   },
 
+  async getGroup(groupId) {
+    const res = await call(route`/rest/api/3/group/bulk?groupId=${groupId}&maxResults=1`);
+    const hit = (res.values ?? []).find((g) => g.groupId === groupId);
+    return hit ? { groupId: hit.groupId, name: hit.name } : null;
+  },
+
   async findGroupByName(name) {
     const res = await call(route`/rest/api/3/group/bulk?groupName=${name}&maxResults=10`);
     const hit = (res.values ?? []).find((g) => g.name.toLowerCase() === name.toLowerCase());
@@ -120,6 +126,31 @@ export const jiraClient = {
   async searchProjects(query, maxResults = 20) {
     const res = await call(route`/rest/api/3/project/search?query=${query}&maxResults=${maxResults}&orderBy=key`);
     return (res.values ?? []).map((p) => ({ id: String(p.id), key: p.key, name: p.name, avatarUrl: p.avatarUrls?.['24x24'] ?? null }));
+  },
+
+  // Project roles of one project with their actors (people and groups). Read as the app.
+  async getProjectRoles(projectId) {
+    const roles = await call(route`/rest/api/3/project/${projectId}/role`);
+    const out = [];
+    await mapLimit(Object.entries(roles ?? {}), 6, async ([name, url]) => {
+      const roleId = String(url).split('/').pop();
+      const role = await call(route`/rest/api/3/project/${projectId}/role/${roleId}`);
+      out.push({
+        roleId: String(role.id ?? roleId),
+        name: role.name ?? name,
+        description: role.description ?? '',
+        actors: (role.actors ?? [])
+          .map((a) =>
+            a.type === 'atlassian-user-role-actor'
+              ? { type: 'user', accountId: a.actorUser?.accountId ?? null, displayName: a.displayName ?? null, avatarUrl: a.avatarUrl ?? null }
+              : a.type === 'atlassian-group-role-actor'
+                ? { type: 'group', groupId: a.actorGroup?.groupId ?? null, name: a.actorGroup?.name ?? a.name ?? a.displayName ?? null }
+                : null,
+          )
+          .filter((a) => a && (a.accountId || a.groupId || a.name)),
+      });
+    });
+    return out.sort((a, b) => a.name.localeCompare(b.name));
   },
 
   // UC-06: where is the group used in Jira (see usage.js).

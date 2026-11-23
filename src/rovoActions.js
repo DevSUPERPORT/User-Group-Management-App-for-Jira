@@ -9,8 +9,8 @@
  * - The caller is the Atlassian user talking to Rovo; their account id comes from
  *   the Forge invocation context, never from the chat.
  * - Every action runs through the same service as the app: project admin rights,
- *   group ownership, block list, IdP read-only, licence and the Organization API
- *   are all enforced there.
+ *   group ownership, block list, IdP read-only, licence and "Jira admins apply
+ *   changes" (a project admin's change waits for a Jira admin) are all enforced there.
  * - Changes are marked "via Rovo" in the audit log (see rovo.js) and are kept small
  *   per call (max. 10 additions / 5 removals) so a misunderstanding cannot do much harm.
  * - Jira-admin mode: a Jira admin's change applies at once (Jira REST as that user); a project admin's change waits

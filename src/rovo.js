@@ -14,11 +14,10 @@
 
 import { createService } from './core/service.js';
 import { jiraClient } from './forge/jiraClient.js';
-import { createOrgClient } from './forge/orgClient.js';
 import { jiraUserWriter } from './forge/jiraUserWriter.js';
 import { environmentTypeOf } from './forge/environment.js';
 import { confluenceClient } from './forge/confluenceClient.js';
-import { kvsSecrets, kvsStore } from './forge/kvsStore.js';
+import { kvsStore } from './forge/kvsStore.js';
 import { sqlAudit } from './forge/sqlAudit.js';
 import { createRovoActions } from './rovoActions.js';
 
@@ -31,7 +30,7 @@ const rovoAudit = {
 // jiraUser: in Jira-admin mode a Jira admin's change runs as that user (asUser works in action invocations: the
 // calling user is the invocation's principal). environmentType: for the development-only test switch.
 const actions = createRovoActions(
-  createService({ jira: jiraClient, org: createOrgClient({ secrets: kvsSecrets }), jiraUser: jiraUserWriter, confluence: confluenceClient, store: kvsStore, audit: rovoAudit }),
+  createService({ jira: jiraClient, jiraUser: jiraUserWriter, confluence: confluenceClient, store: kvsStore, audit: rovoAudit }),
   { environmentType: environmentTypeOf },
 );
 

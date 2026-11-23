@@ -33,16 +33,18 @@ export const ErrorCodes = {
   NAME_TAKEN: 'NAME_TAKEN',
   LICENSE_INACTIVE: 'LICENSE_INACTIVE',
   JIRA_ERROR: 'JIRA_ERROR',
-  ORG_API_NOT_CONFIGURED: 'ORG_API_NOT_CONFIGURED',
-  ORG_API_UNAUTHORIZED: 'ORG_API_UNAUTHORIZED',
-  ORG_API_ERROR: 'ORG_API_ERROR',
-  ORG_DIRECTORY_REQUIRED: 'ORG_DIRECTORY_REQUIRED',
   BAD_REQUEST: 'BAD_REQUEST',
   GROUP_USED_ELSEWHERE: 'GROUP_USED_ELSEWHERE',
   // Jira-admin mode: Jira answered 403 to a group write made as the signed-in user (only Jira admins may).
   JIRA_ADMIN_REQUIRED: 'JIRA_ADMIN_REQUIRED',
   // Jira-admin mode: the signed-in user has not allowed the app to act on their behalf yet (Forge asUser consent).
   USER_CONSENT_REQUIRED: 'USER_CONSENT_REQUIRED',
+  // Project roles: the role is not (or no longer) in this project, or Jira refused the change for the caller.
+  ROLE_NOT_FOUND: 'ROLE_NOT_FOUND',
+  ROLE_FORBIDDEN: 'ROLE_FORBIDDEN',
+  // Automatic changes: the Jira admin whose account applies project admins' changes can no longer do so (no longer a
+  // Jira admin, deactivated, or their permission for the app was withdrawn). Changes wait for a Jira admin again.
+  PRIVILEGED_ADMIN_UNAVAILABLE: 'PRIVILEGED_ADMIN_UNAVAILABLE',
   // SUPERPORT kill switch (APP_MAINTENANCE, see maintenance.js): app down or changes paused.
   UNAVAILABLE: 'UNAVAILABLE',
 };

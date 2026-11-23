@@ -13,7 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService } from '../src/core/service.js';
-import { memoryAudit, memoryJira, memoryOrg, memoryStore } from '../src/dev/memory.js';
+import { memoryAudit, memoryJira, memoryStore, memoryJiraUser } from '../src/dev/memory.js';
 import { createSeed } from '../src/dev/seed.js';
 
 const NOW = Date.UTC(2026, 9, 24, 10, 0, 0);
@@ -24,7 +24,7 @@ function setup() {
   const store = memoryStore(seed.store);
   const audit = memoryAudit([]);
   const jira = memoryJira(seed.jira);
-  const service = createService({ jira, org: memoryOrg(seed.jira), store, audit, now: () => NOW });
+  const service = createService({ jira, jiraUser: memoryJiraUser(seed.jira), store, audit, now: () => NOW });
   const admin = () => ({ accountId: 'u-me', projectId: '10001', surface: 'project', license: null });
   return { service, store, audit, data: seed.jira, admin };
 }
@@ -166,7 +166,8 @@ test('Scope guard: project admins cannot add people to a group that grants acces
   const by = (g) => res.results.find((r) => r.groupId === g);
   assert.equal(by('g-big').status, 'failed');
   assert.equal(by('g-big').code, 'GROUP_USED_ELSEWHERE');
-  assert.equal(by('g-reviewer').status, 'added');
+  // Lena is no Jira admin: the allowed addition waits for one.
+  assert.equal(by('g-reviewer').status, 'pending');
 
   // Removing people only narrows access: always allowed. Undo restores it again.
   const someone = data.groups['g-big'].members[0];

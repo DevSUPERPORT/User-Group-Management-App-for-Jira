@@ -27,6 +27,8 @@ const ACTIONS = [
   'GROUP_CREATED',
   'MEMBER_ADDED',
   'MEMBER_REMOVED',
+  'ROLE_MEMBER_ADDED',
+  'ROLE_MEMBER_REMOVED',
   'MEMBER_EXPIRED',
   'MEMBER_AUTO_REMOVED',
   'EXPIRY_CHANGED',
@@ -254,6 +256,8 @@ export function AuditLog({ scope, preset }) {
                           <td>
                             {e.action === 'PROJECT_KEY_CHANGED' ? (
                               t('audit.keyChange', { from: e.details?.from, to: e.details?.to, count: e.details?.affectedGroups ?? 0 })
+                            ) : e.action === 'CONFIG_CHANGED' && e.details?.privilegedAdmin ? (
+                              <span className="muted">{t(`audit.privileged.${e.details.privilegedAdmin}`, { name: e.details.appliedAs ?? '' })}</span>
                             ) : e.action === 'CONFIG_CHANGED' ? (
                               <span className="muted">{t('audit.configFields', { fields: (e.details?.changed ?? []).join(', ') })}</span>
                             ) : (
@@ -272,6 +276,7 @@ export function AuditLog({ scope, preset }) {
                             ) : (
                               e.actorName
                             )}
+                            {e.details?.appliedAs && e.action !== 'CONFIG_CHANGED' && <span className="muted"> {t('audit.appliedAs', { name: e.details.appliedAs })}</span>}
                           </td>
                         </motion.tr>
                       );
